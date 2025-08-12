@@ -8,10 +8,10 @@ from algorithms import *
 
 
 # ==== 実行 ====
-random.seed(1)
+# random.seed(1)
 uavs = generate_random_uavs(NUM_OF_DRONES, MALICIOUS_RATE)
-time_steps = 8
-for t in range(time_steps):
+
+for t in range(TIME_STEPS):
     calculate_direct_trust(uavs)
     calculate_indirect_trust(uavs)
     calculate_fitness(uavs)
@@ -25,3 +25,5 @@ for t in range(time_steps):
 for cid, c in enumerate(clusters):
     leader, sub = select_leader(c)
     print(f"Cluster {cid}: Leader={leader.id} Trust={leader.final_trust:.3f}, SubLeader={sub.id if sub else None}")
+
+plot_uavs_3d(uavs)

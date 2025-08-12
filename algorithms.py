@@ -5,7 +5,6 @@ from utils import *
 from global_set import *
 
 
-
 # アルゴリズム2: Direct Trust
 def calculate_direct_trust(uavs: List[UAV]):
     ss_norm, pdr_norm, energy_norm,delay_norm = normalize_components(uavs)
@@ -26,14 +25,6 @@ def calculate_indirect_trust(uavs: List[UAV]):
         others = [v.direct_trust for j,v in enumerate(uavs) if j != i]
         recom = sum(others) / len(others) if others else u.direct_trust
         u.indirect_trust = math.sqrt(u.direct_trust * recom)
-
-# Fitness 計算 (式1,2,3)
-def calculate_fitness(uavs: List[UAV]):
-    for u in uavs:
-        davg = sum(distance(u, v) for v in uavs if v.id != u.id) / (len(uavs)-1)
-        davg_norm = davg / 2000.0
-        Fi = (A_COEFF * davg_norm) + (0.45 * u.energy)
-        u.fitness = Fi
 
 # アルゴリズム1: Final Trust
 def calculate_final_trust(uavs: List[UAV]):
