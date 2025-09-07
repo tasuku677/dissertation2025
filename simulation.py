@@ -63,12 +63,13 @@ class TdlsFanetSimulation:
     def _calculate_fitness_score(self, uav):
         if not uav.neighbors:
             return 0.0
-        
-        d_avg = np.mean([np.linalg.norm(uav.pos - n.pos) for n in uav.neighbors])
+        d_sum= [np.linalg.norm(uav.pos - n.pos) for n in self.drones if uav.id != n.id]
+        d_avg = np.mean(d_sum) ### 全ドローンとの平均距離
+        d_max = max(d_sum) if d_sum else 1.0
         r_e = uav.energy / self.config.INITIAL_ENERGY # 残存エネルギー率 (正規化)
 
-        # D_avgも正規化が必要
-        norm_d_avg = 1 - (d_avg / (self.config.COMM_RANGE * 1.5))
+        # # D_avgも正規化が必要
+        norm_d_avg = 1 - min(d_avg / d_max, 1.0) # 距離が近いほど高評価
 
         fitness_score = self.config.A_COEFFICIENT * norm_d_avg + 0.45 * r_e
         return fitness_score
@@ -101,8 +102,7 @@ class TdlsFanetSimulation:
         self.clusters = {}
         cluster_id_counter = 0
 
-        # ドローンをX座標でソート
-        sorted_drones = sorted(eligible_drones, key=lambda d: d.pos[0])
+        sorted_drones = sorted(eligible_drones, key=lambda d: (d.pos[0],d.pos[1],d.pos[2]))
 
         for drone in sorted_drones:
             if drone.id in processed_drones:
@@ -118,7 +118,7 @@ class TdlsFanetSimulation:
                 if other_drone.id not in processed_drones:
                     dist = np.linalg.norm(drone.pos - other_drone.pos)
                     # クラスタのサイズも考慮 (仮に5機まで)
-                    if dist < self.config.COMM_RANGE * 0.7 and len(new_cluster) < 5:
+                    if dist < self.config.COMM_RANGE  and len(new_cluster) < 10:
                         new_cluster.append(other_drone)
                         other_drone.cluster_id = cluster_id_counter
                         processed_drones.add(other_drone.id)
