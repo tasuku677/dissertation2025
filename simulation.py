@@ -38,10 +38,17 @@ class TdlsFanetSimulation:
         # パラメータを正規化 (0-1の範囲に)
         norm_ss = min(signal_strength * 1e-4, 1.0)
         norm_pdr = pdr
+        norm_energy = min(uav_j.energy / self.config.INITIAL_ENERGY, 1.0)
         norm_delay = 1 - min(delay, 1.0) # 遅延が小さいほど高評価
 
         # 重み付けして直接信頼度を算出
-        direct_trust = 0.4 * norm_ss + 0.4 * norm_pdr + 0.2 * norm_delay
+        total_weight = 0.25 * norm_ss + 0.25 * norm_pdr + 0.25 * norm_energy + 0.25 * norm_delay
+        if total_weight >= 0.7:
+            direct_trust = 0.5 * 2 ** total_weight
+        elif total_weight >= 0.3:
+            direct_trust = 0.5 * 1.5 ** total_weight
+        else:
+            direct_trust = 0.5 * 0.5 ** total_weight
         return direct_trust
 
     # Algorithm 3: 間接信頼度の計算
@@ -52,8 +59,7 @@ class TdlsFanetSimulation:
         recommendations = []
         for neighbor_k in uav_i.neighbors:
             # neighbor_kから見たuav_iへの直接信頼度 (本来はkがiを評価する)
-            # ここでは簡単のため、iがkを評価した値を使う
-            rec = self._calculate_direct_trust(uav_i, neighbor_k)
+            rec = self._calculate_direct_trust(neighbor_k, uav_i)
             recommendations.append(rec)
             
         avg_rec = np.mean(recommendations)
@@ -63,9 +69,9 @@ class TdlsFanetSimulation:
     def _calculate_fitness_score(self, uav):
         if not uav.neighbors:
             return 0.0
-        d_sum= [np.linalg.norm(uav.pos - n.pos) for n in self.drones if uav.id != n.id]
+        d_sum = [np.linalg.norm(uav.pos - n.pos) for n in self.drones if uav.id != n.id]
         d_avg = np.mean(d_sum) ### 全ドローンとの平均距離
-        d_max = max(d_sum) if d_sum else 1.0
+        d_max = np.max(d_sum) if d_sum else 1.0
         r_e = uav.energy / self.config.INITIAL_ENERGY # 残存エネルギー率 (正規化)
 
         # # D_avgも正規化が必要
@@ -78,7 +84,7 @@ class TdlsFanetSimulation:
     def _calculate_final_trust(self, uav):
         total_direct_trust = 0
         if uav.neighbors:
-            total_direct_trust = np.mean([self._calculate_direct_trust(uav, n) for n in uav.neighbors])
+            total_direct_trust = np.mean([self._calculate_direct_trust(uav, n) for n in uav.neighbors]) ## TODO: ガウス分布表現による信頼値集約に変更
         
         indirect_trust = self._calculate_indirect_trust(uav)
         
@@ -96,7 +102,7 @@ class TdlsFanetSimulation:
     # Algorithm 4: クラスタ形成
     def form_clusters(self):
         # 信頼度が低いドローンを除外
-        eligible_drones = [d for d in self.drones if d.trust_score > 0.4]
+        eligible_drones = [d for d in self.drones if d.trust_score > 0.29 and d.energy > 0]
         
         processed_drones = set()
         self.clusters = {}
@@ -117,8 +123,7 @@ class TdlsFanetSimulation:
             for other_drone in sorted_drones:
                 if other_drone.id not in processed_drones:
                     dist = np.linalg.norm(drone.pos - other_drone.pos)
-                    # クラスタのサイズも考慮 (仮に5機まで)
-                    if dist < self.config.COMM_RANGE  and len(new_cluster) < 10:
+                    if dist < self.config.COMM_RANGE and len(new_cluster) < 10:
                         new_cluster.append(other_drone)
                         other_drone.cluster_id = cluster_id_counter
                         processed_drones.add(other_drone.id)
@@ -127,6 +132,11 @@ class TdlsFanetSimulation:
 
     # Algorithm 5: リーダー選出
     def select_leaders(self):
+        # 全ドローンのリーダーフラグをリセット
+        for drone in self.drones:
+            drone.is_leader = False
+            drone.is_sub_leader = False
+        # 各クラスタでリーダーとサブリーダーを選出
         for cid, members in self.clusters.items():
             if len(members) < 2:
                 if members: members[0].is_leader = True
@@ -198,10 +208,11 @@ class TdlsFanetSimulation:
                 self._calculate_final_trust(drone)
 
             # 3. クラスタ形成とリーダー選出
-            self.form_clusters()
-            self.select_leaders()
+            if t % 5 == 0: # 5秒ごとにクラスタ再形成
+                self.form_clusters()
+                self.select_leaders()
             
-            self.visualizer.update(self.drones)
+            self.visualizer.update(self.drones, sim_time=t)
 
 
             # 4. 評価指標の計測
@@ -220,7 +231,7 @@ class TdlsFanetSimulation:
             self.history['pdr'].append(pdr)
             self.history['delay'].append(avg_delay)
 
-            print(f"Time: {t}s, Clusters: {len(self.clusters)}, PDR: {pdr:.3f}, Delay: {avg_delay*1000:.2f}ms, Leaders: {leader_map}")
+            print(f"Time: {t}s, Leaders: {leader_map}")
 
     def plot_results(self):
         self.visualizer.close()
