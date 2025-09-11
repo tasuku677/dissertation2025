@@ -85,6 +85,7 @@ class LiveVisualizer:
         self.fig.canvas.flush_events()
             
         plt.pause(0.01) # 短いポーズを入れてGUIを更新
+    
 
     def close(self):
         plt.ioff() # インタラクティブモードをオフ

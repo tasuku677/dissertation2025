@@ -1,10 +1,13 @@
 class SimConfig:
+    C = 2.99792458 * 1e8 # 光速 (m/s)
+    F = 2.4 * 1e9 # 周波数 (Hz) - 2.4GHz
+    
     NUM_DRONES = 50
     AREA_SIZE = (1600, 1200, 800)  # X, Y, Z (m)
     SIM_DURATION = 40  # seconds
     TIME_STEP = 1  # 1秒ごとにシミュレーションを更新
     VELOCITY_RANGE = (8.9, 31.3)  # 20-70 mphをm/sに変換
-    COMM_RANGE = 300  # 通信範囲 (m) - 仮定 論文では50-300m 
+    COMM_RANGE = 250  # 通信範囲 (m) - 仮定 論文では50-300m 
     INITIAL_TRUST = 0.5
     INITIAL_ENERGY = 26.25 * 3600  # Whをジュールに変換 (仮)
     ENERGY_TX = 0.00000046 * 1e-9 # nJ/bitをJ/bitに変換

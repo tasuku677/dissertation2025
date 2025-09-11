@@ -5,6 +5,8 @@ import random
 from draw import LiveVisualizer
 from uav import UAV
 
+from utils import *
+
 # --- TDLS-FANET シミュレーションクラス ---
 class TdlsFanetSimulation:
     def __init__(self, config):
@@ -12,7 +14,7 @@ class TdlsFanetSimulation:
         self.drones = [UAV(i, config) for i in range(config.NUM_DRONES)]
         self.clusters = {}
         # 評価指標記録用
-        self.history = {'time': [], 'energy': [], 'delay': [], 'pdr': []}
+        self.history = {'time': [], 'energy': [], 'delay': [], 'pdr': [], 'trust': {i:[] for i in range(config.NUM_DRONES)}}
         # 描画クラス
         self.visualizer = LiveVisualizer(config.AREA_SIZE, self.drones)
 
@@ -20,7 +22,7 @@ class TdlsFanetSimulation:
     # Algorithm 2: 直接信頼度の計算 (簡略版)
     def _calculate_direct_trust(self, uav_i, uav_j): #uav_i から見た uav_j の直接信頼値
         # 論文のアルゴリズムは非常に複雑なため、ここではPDR, 遅延, 信号強度を模擬
-        # 信号強度は距離の逆二乗に比例すると仮定
+
         dist = np.linalg.norm(uav_i.pos - uav_j.pos)
         signal_strength = 1 / (dist**2) if dist > 0 else 1.0
 
@@ -36,7 +38,7 @@ class TdlsFanetSimulation:
             delay = random.uniform(0.1, 0.5)
             
         # パラメータを正規化 (0-1の範囲に)
-        norm_ss = min(signal_strength * 1e-4, 1.0)
+        norm_ss = calculate_signal_strength(self.config, dist) / 3.24
         norm_pdr = pdr
         norm_energy = min(uav_j.energy / self.config.INITIAL_ENERGY, 1.0)
         norm_delay = 1 - min(delay, 1.0) # 遅延が小さいほど高評価
@@ -96,7 +98,6 @@ class TdlsFanetSimulation:
         final_trust = (self.config.B_COEFFICIENT_FITNESS * fitness_score +
                        self.config.B_COEFFICIENT_HYBRID * hybrid_trust)
         
-        uav.trust_score = final_trust # ドローンの信頼度を更新
         return final_trust
 
     # Algorithm 4: クラスタ形成
@@ -205,8 +206,12 @@ class TdlsFanetSimulation:
 
             # 2. 信頼度の計算
             for drone in self.drones:
-                self._calculate_final_trust(drone)
+                self.history['trust'][drone.id].append(drone.trust_score)
+                if drone.neighbors: # 近隣がいる場合のみ信頼度更新,　無い場合は前回値を維持
+                    drone.trust_score = self._calculate_final_trust(drone)
 
+            
+                
             # 3. クラスタ形成とリーダー選出
             if t % 5 == 0: # 5秒ごとにクラスタ再形成
                 self.form_clusters()
@@ -259,5 +264,20 @@ class TdlsFanetSimulation:
         axs[2].set_xlabel('Time (s)')
         axs[2].set_ylabel('Delay (ms)')
 
+        plt.tight_layout()
+        plt.show()
+        
+    # trustの推移をプロット    
+    def plot_trust(self, uav_ids=None):
+        if uav_ids is None:
+            uav_ids = list(range(min(5, self.config.NUM_DRONES)))  # デフォルトで先頭5機
+        plt.figure(figsize=(10, 6))
+        for i in uav_ids:
+            plt.plot(self.history['time'], self.history['trust'][i], label=f'UAV {i}')
+        plt.title('UAV Trust over Time')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Trust')
+        plt.ylim(0, 1.1)
+        plt.legend()
         plt.tight_layout()
         plt.show()
