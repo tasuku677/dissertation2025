@@ -3,7 +3,7 @@ class SimConfig:
     F = 2.4 * 1e9 # 周波数 (Hz) - 2.4GHz
     
     NUM_DRONES = 50
-    AREA_SIZE = (1600, 1200, 800)  # X, Y, Z (m)
+    AREA_SIZE = (800, 600, 400)  # X, Y, Z (m)
     SIM_DURATION = 40  # seconds
     TIME_STEP = 1  # 1秒ごとにシミュレーションを更新
     VELOCITY_RANGE = (8.9, 31.3)  # 20-70 mphをm/sに変換
@@ -15,5 +15,9 @@ class SimConfig:
     
     # 信頼度計算の係数 (論文より)
     A_COEFFICIENT = 0.3 # 0.2から0.45の間の値
+    L_COEEFFICIENT = 0.5 # 直接信頼値
+    M_COEFFICIENT = 0.5 # 間接接信頼値
     B_COEFFICIENT_FITNESS = 0.5 # a*F_i + b*HT_i の 'a'
     B_COEFFICIENT_HYBRID = 0.5 # a*F_i + b*HT_i の 'b'
+    
+    
