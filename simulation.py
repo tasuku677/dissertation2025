@@ -160,7 +160,10 @@ class TdlsFanetSimulation:
                 if sum_of_distances == 0:
                     score = member.trust_score
                 else:
-                    score = member.trust_score / sum_of_distances
+                    k = len(member.neighbors)
+                    mu = member.trust_score
+                    sampled_score = float(np.random.normal(mu, np.sqrt(1.0 / k)))
+                    score = sampled_score / sum_of_distances
                 leader_scores.append((score, member))
 
             # スコアでソートし、リーダーとサブリーダーを決定
