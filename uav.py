@@ -1,6 +1,8 @@
+import asyncio
 import numpy as np
 import matplotlib.pyplot as plt
 import random
+from typing import Any, Dict
 
 
 from global_var import SimConfig
@@ -26,6 +28,11 @@ class UAV:
         self.type = random.choice(['good', 'neutral', 'bad']) # ドローンの種類
         self.pdr = self.sample_pdr(self.type)
         self.delay = self.sample_delay(self.type)  # 通信遅延のサンプル
+        
+        # 非同期通信用の受信ボックス
+        self.inbox = asyncio.Queue()
+        self.sent_packets: Dict[int, Packet] = {} # 送信したパケットを追跡 {dest_id: Packet}
+
 
 
     def _get_random_velocity(self, v_range):
