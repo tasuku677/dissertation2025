@@ -20,7 +20,7 @@ class TdlsFanetSimulation:
 
 
     # Algorithm 2: 直接信頼度の計算 (簡略版)
-    def calculate_direct_trust(self, uav_x): #uav_x から見た隣接ノード uav_j の直接信頼値を求める．
+    def update_direct_trust(self, uav_x): #uav_x から見た隣接ノード uav_j の直接信頼値を求める．
         """
         引数：評価者 uav_x,
         返り値：辞書 uav_x の隣接ノード郡 uav_id: trust_value,
@@ -46,7 +46,7 @@ class TdlsFanetSimulation:
         return uav_x.direct_trust_to_neightbors
 
     # Algorithm 3: 間接信頼度の計算
-    def calculate_indirect_trust(self, uav_x): # uav_x から見たノード uav_j の間接信頼値を求める．
+    def update_indirect_trust(self, uav_x): # uav_x から見たノード uav_j の間接信頼値を求める．
         """
         引数:評価者 uav_x, 評価対象 uav_j
         返り値:uav_x から見た uav_j の間接信頼値
@@ -84,7 +84,7 @@ class TdlsFanetSimulation:
         return fitness_score
     
     # Algorithm 1: 最終信頼度の計算
-    def calculate_final_trust(self, uav_j): 
+    def update_final_trust(self, uav_j): 
         members = self.clusters.get(uav_j.cluster_id, [])
         fitness_score = self._calculate_fitness_score(uav_j)
         if not members:
@@ -106,7 +106,7 @@ class TdlsFanetSimulation:
             self.config.B_COEFFICIENT_FITNESS * fitness_score
             + self.config.B_COEFFICIENT_HYBRID * avg_hybrid_by_target
         )
-
+        uav_j.trust_score = final_trust
         return final_trust
          
         
@@ -219,14 +219,14 @@ class TdlsFanetSimulation:
                 drone.update_neighbors(self.drones)
             print(f"Time {t}s: Drones updated neighbors.")
             for drone in self.drones:
-                self.calculate_direct_trust(drone)
+                self.update_direct_trust(drone)
             print(f"Time {t}s: Drones calculated direct trust.")
             for drone in self.drones:
-                self.calculate_indirect_trust(drone)
+                self.update_indirect_trust(drone)
             print(f"Time {t}s: Drones calculated indirect trust.")
             for drone in self.drones:
                 self.history['trust'][drone.id].append(drone.trust_score)# 信頼値の記録を載せる．
-                drone.trust_score = self.calculate_final_trust(drone)
+                self.update_final_trust(drone)
             print(f"Time {t}s: Trust scores updated.")   
             #TODO:余裕があれば 各ループ度にノードが位置情報やバッテリー残量を隣接ノードに伝える処理を追加する．
             
