@@ -6,6 +6,7 @@ from typing import Any, Dict
 
 
 from global_var import SimConfig
+from packet import Packet
 
 # --- UAV (ドローン) クラス ---
 class UAV:
@@ -33,6 +34,40 @@ class UAV:
         self.inbox = asyncio.Queue()
         self.sent_packets: Dict[int, Packet] = {} # 送信したパケットを追跡 {dest_id: Packet}
 
+    async def send_packet(self, destination_uav: 'UAV', data: Any, sim_time: float) -> tuple[bool, float]:
+        packet = Packet(self.id, destination_uav.id, data, sim_time)
+        self.consume_energy_tx(SimConfig.PACKET_SIZE)
+        self.sent_packets[destination_uav.id] = packet
+        dist = np.linalg.norm(self.pos - destination_uav.pos)
+        transmission_delay = dist / SimConfig.C + self.sample_delay(self.type) #TODO: データサイズの影響を考慮
+        await asyncio.sleep(transmission_delay)
+        success_prob = destination_uav.trust_score * (1 - dist / (SimConfig.COMM_RANGE * 1.5)) #TODO:これも後で考える
+        if random.random() < success_prob:
+            await destination_uav.inbox.put(packet)
+            # print(f"✅ Packet sent: {self.id} -> {destination_uav.id}")
+            return True, transmission_delay # 成功フラグと遅延を返す
+        else:
+            # print(f"❌ Packet loss: {self.id} -> {destination_uav.id}")
+            return False, transmission_delay # 失敗フラグと遅延を返す
+
+
+    async def packet_handler(self):
+        """受信ボックスを監視し、受信したパケットを処理する"""
+        while True:
+            try:
+                # タイムアウトを設けて、シミュレーション終了時にタスクを停止できるようにする
+                packet: Packet = await asyncio.wait_for(self.inbox.get(), timeout=1.0)
+                
+                print(f"📦 Packet received by {self.id} from {packet.source_id}, data: '{packet.data}'")
+                # ここで受信したデータに応じた処理を行う (例: 信頼度更新のトリガーなど)
+                self.inbox.task_done()
+                
+            except asyncio.TimeoutError:
+                # タイムアウトした場合はループを継続
+                pass
+            except asyncio.CancelledError:
+                # タスクがキャンセルされたらループを抜ける
+                break
 
 
     def _get_random_velocity(self, v_range):
@@ -40,7 +75,7 @@ class UAV:
         direction = np.random.rand(3) - 0.5
         return direction / np.linalg.norm(direction) * speed
 
-    def move(self, time_step):
+    async def move(self, time_step):
         # ランダムウェイポイントモデル
         if np.linalg.norm(self.pos - self.destination) < 20:
             self.destination = np.random.rand(3) * SimConfig.AREA_SIZE
@@ -55,6 +90,8 @@ class UAV:
         self.pos += self.velocity * time_step
         # 移動によるエネルギー消費（仮）
         self.energy -= 0.1 * np.linalg.norm(self.velocity) 
+        
+        await asyncio.sleep(time_step)
 
     def update_neighbors(self, all_drones):
         self.neighbors = []

@@ -1,11 +1,13 @@
+import asyncio
 import numpy as np
 import matplotlib.pyplot as plt
-import random
+from typing import Tuple
 
 from draw import LiveVisualizer
-from uav import UAV
-
+from uav import UAV 
+from packet import Packet 
 from utils import *
+
 
 # --- TDLS-FANET シミュレーションクラス ---
 class TdlsFanetSimulation:
@@ -20,7 +22,7 @@ class TdlsFanetSimulation:
 
 
     # Algorithm 2: 直接信頼度の計算 (簡略版)
-    def calculate_direct_trust(self, uav_x): #uav_x から見た隣接ノード uav_j の直接信頼値を求める．
+    def update_direct_trust(self, uav_x): #uav_x から見た隣接ノード uav_j の直接信頼値を求める．
         """
         引数：評価者 uav_x,
         返り値：辞書 uav_x の隣接ノード郡 uav_id: trust_value,
@@ -46,7 +48,7 @@ class TdlsFanetSimulation:
         return uav_x.direct_trust_to_neightbors
 
     # Algorithm 3: 間接信頼度の計算
-    def calculate_indirect_trust(self, uav_x): # uav_x から見たノード uav_j の間接信頼値を求める．
+    def update_indirect_trust(self, uav_x): # uav_x から見たノード uav_j の間接信頼値を求める．
         """
         引数:評価者 uav_x, 評価対象 uav_j
         返り値:uav_x から見た uav_j の間接信頼値
@@ -84,7 +86,7 @@ class TdlsFanetSimulation:
         return fitness_score
     
     # Algorithm 1: 最終信頼度の計算
-    def calculate_final_trust(self, uav_j): 
+    def update_final_trust(self, uav_j): 
         members = self.clusters.get(uav_j.cluster_id, [])
         fitness_score = self._calculate_fitness_score(uav_j)
         if not members:
@@ -106,8 +108,8 @@ class TdlsFanetSimulation:
             self.config.B_COEFFICIENT_FITNESS * fitness_score
             + self.config.B_COEFFICIENT_HYBRID * avg_hybrid_by_target
         )
-
-        return final_trust
+        uav_j.trust_score = final_trust
+        return uav_j.trust_score
          
         
     # Algorithm 4: クラスタ形成
@@ -176,84 +178,83 @@ class TdlsFanetSimulation:
                 sub_leader = leader_scores[1][1]
                 sub_leader.is_sub_leader = True
 
-    def _simulate_communication(self):
-        # 通信をシミュレートし、PDRと遅延を計測
+    async def _simulate_communication(self, t: int) -> Tuple[float, float]:
+        """パケット送受信をシミュレートし、PDRと平均遅延を返す"""
+        tasks = []
         total_packets = 0
         successful_packets = 0
         total_delay = 0
 
         for cid, members in self.clusters.items():
             leader = next((m for m in members if m.is_leader), None)
-            if not leader:
-                continue
+            if not leader: continue
 
             for member in members:
-                if member.is_leader:
-                    continue
-                
-                # メンバーからリーダーへの通信
-                total_packets += 1
-                member.consume_energy_tx(self.config.PACKET_SIZE)
-                
-                dist = np.linalg.norm(member.pos - leader.pos)
-                # 成功確率 (PDR) は信頼度と距離に依存すると仮定
-                success_prob = leader.trust_score * (1 - dist / (self.config.COMM_RANGE * 2))
-                if random.random() < success_prob:
-                    successful_packets += 1
-                    # 遅延は距離に比例
-                    total_delay += dist / (3 * 1e8) # 光速で割る
-                else:
-                    total_delay += 0.5 # タイムアウト遅延
+                if not member.is_leader:
+                    total_packets += 1
+                    # send_packetをawaitし、成功したかどうかのbool値と遅延を受け取る
+                    task = asyncio.create_task(member.send_packet(leader, data=f"Status report from {member.id}", sim_time=t))
+                    tasks.append((task, member, leader)) # タスクと関連UAVをタプルで保存
+
+        # 全ての送信タスクの完了を待つ
+        results = await asyncio.gather(*[t[0] for t in tasks])
+
+        # 結果を集計
+        for (task, member, leader), (success, delay) in zip(tasks, results):
+            if success:
+                successful_packets += 1
+            total_delay += delay
 
         pdr = successful_packets / total_packets if total_packets > 0 else 1.0
         avg_delay = total_delay / total_packets if total_packets > 0 else 0.0
         return pdr, avg_delay
+
         
-    def run(self):
+    async def run_uav_task(self, drone):
+        """個々のUAVの1ステップ分のタスク"""
+        await drone.move(self.config.TIME_STEP)
+        drone.update_neighbors(self.drones)
+        self.update_direct_trust(drone)
+        self.update_indirect_trust(drone)
+        self.history['trust'][drone.id].append(drone.trust_score)
+        self.update_final_trust(drone)
+        
+    async def run(self):
+        # 各UAVのパケットハンドラーをバックグラウンドタスクとして起動
+        self.packet_handlers = [asyncio.create_task(drone.packet_handler()) for drone in self.drones]
+        
         for t in range(0, self.config.SIM_DURATION, self.config.TIME_STEP):
-            # 1. ドローンの移動と近隣情報の更新
-            for drone in self.drones:
-                drone.move(self.config.TIME_STEP)
-            print(f"Time {t}s: Drones moved.")
-            for drone in self.drones:
-                drone.update_neighbors(self.drones)
-            print(f"Time {t}s: Drones updated neighbors.")
-            for drone in self.drones:
-                self.calculate_direct_trust(drone)
-            print(f"Time {t}s: Drones calculated direct trust.")
-            for drone in self.drones:
-                self.calculate_indirect_trust(drone)
-            print(f"Time {t}s: Drones calculated indirect trust.")
-            for drone in self.drones:
-                self.history['trust'][drone.id].append(drone.trust_score)# 信頼値の記録を載せる．
-                drone.trust_score = self.calculate_final_trust(drone)
-            print(f"Time {t}s: Trust scores updated.")   
-            #TODO:余裕があれば 各ループ度にノードが位置情報やバッテリー残量を隣接ノードに伝える処理を追加する．
-            
-            # 3. クラスタ形成とリーダー選出
-            if t % 20 == 0: #20秒ごとにクラスタ再形成
+            # 1. 全UAVのタスク（移動、近隣更新、信頼度計算）を並行実行
+            uav_tasks = [self.run_uav_task(drone) for drone in self.drones]
+            await asyncio.gather(*uav_tasks)
+            print(f"Time {t}s: Drones moved and updated their states.")
+
+            # 2. クラスタ形成とリーダー選出 (20秒ごと)
+            if t % 10 == 0:
                 self.form_clusters()
                 self.select_leaders()
+                print(f"Time {t}s: Clusters and leaders have been updated.")
             
-            self.visualizer.update(self.drones, sim_time=t)
-
-            # 4. 評価指標の計測
-            pdr, avg_delay = self._simulate_communication()
-            total_energy = sum([d.energy for d in self.drones])
+            # 3. 通信をシミュレートし、結果を取得
+            pdr, avg_delay = await self._simulate_communication(t)
             
-            leader_map = {}
-            for cid, members in self.clusters.items():
-                # is_leaderがTrueのメンバーを探す
-                leader = next((m for m in members if m.is_leader), None)
-                if leader:
-                    leader_map[cid] = leader.id # {クラスタID: リーダードローンID}
-            
+            # 4. 評価指標を記録
+            total_energy = sum(d.energy for d in self.drones)
             self.history['time'].append(t)
             self.history['energy'].append(total_energy)
             self.history['pdr'].append(pdr)
             self.history['delay'].append(avg_delay)
+            
+            # 5. 可視化とログ表示
+            self.visualizer.update(self.drones, sim_time=t)
+            leader_map = {cid: next((m.id for m in mems if m.is_leader), None) for cid, mems in self.clusters.items()}
+            print(f"Time: {t}s, PDR: {pdr:.2f}, Avg Delay: {avg_delay*1000:.2f}ms, Leaders: {leader_map}")
 
-            print(f"Time: {t}s, Leaders: {leader_map}")
+        # シミュレーション終了時にパケットハンドラーを安全に停止
+        for task in self.packet_handlers:
+            task.cancel()
+        await asyncio.gather(*self.packet_handlers, return_exceptions=True)
+
 
     def plot_results(self):
         self.visualizer.close()
