@@ -33,6 +33,7 @@ class UAV:
         self.inbox = asyncio.Queue()
         self.sent_packets: Dict[int, Packet] = {} # 送信したパケットを追跡 {dest_id: Packet}
 
+    #TODO: パケット送信ごとにエネルギー消費を考慮
     async def send_packet(self, destination_uav: 'UAV', data: Any, sim_time: float) -> tuple[bool, float]:
         packet = Packet(self.id, destination_uav.id, data, sim_time)
         self.consume_energy_tx(SimConfig.PACKET_SIZE)

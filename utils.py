@@ -22,6 +22,7 @@ def normalize_components(uav_i:UAV):
     energy_raw = {}
     delay_raw = {}
 
+    #TODO: delayをパケットの数とそのデータサイズの合計にする
     for uav_j in uav_i.neighbors:
         dist = np.linalg.norm(uav_i.pos - uav_j.pos)
         ss_raw[uav_j.id] = _calculate_signal_strength(dist) / 3.24
