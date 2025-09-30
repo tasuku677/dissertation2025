@@ -185,7 +185,7 @@ class TdlsFanetSimulation:
         successful_packets = 0
         total_delay = 0
 
-        for cid, members in self.clusters.items():
+        for _, members in self.clusters.items():
             leader = next((m for m in members if m.is_leader), None)
             if not leader: continue
 
