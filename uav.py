@@ -1,6 +1,5 @@
 import asyncio
 import numpy as np
-import matplotlib.pyplot as plt
 import random
 from typing import Any, Dict
 
@@ -75,6 +74,8 @@ class UAV:
         direction = np.random.rand(3) - 0.5
         return direction / np.linalg.norm(direction) * speed
 
+    #TODO: 他のウェイポイントを実装
+    
     async def move(self, time_step):
         # ランダムウェイポイントモデル
         if np.linalg.norm(self.pos - self.destination) < 20:

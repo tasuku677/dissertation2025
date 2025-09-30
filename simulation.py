@@ -229,7 +229,7 @@ class TdlsFanetSimulation:
             await asyncio.gather(*uav_tasks)
             print(f"Time {t}s: Drones moved and updated their states.")
 
-            # 2. クラスタ形成とリーダー選出 (20秒ごと)
+            # 2. クラスタ形成とリーダー選出 (10秒ごと)
             if t % 10 == 0:
                 self.form_clusters()
                 self.select_leaders()
@@ -291,7 +291,7 @@ class TdlsFanetSimulation:
             uav_ids = list(range(min(5, self.config.NUM_DRONES)))  # デフォルトで先頭5機
         plt.figure(figsize=(10, 6))
         for i in uav_ids:
-            plt.plot(self.history['time'], self.history['trust'][i], label=f'UAV {i}')
+            plt.plot(self.history['time'], self.history['trust'][i], label=f'UAV {i}:{self.drones[i].type}')
         plt.title('UAV Trust over Time')
         plt.xlabel('Time (s)')
         plt.ylabel('Trust')
