@@ -2,6 +2,7 @@ import asyncio
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import Tuple
+import csv
 
 from draw import LiveVisualizer
 from uav import UAV 
@@ -71,6 +72,7 @@ class TdlsFanetSimulation:
         return uav_x.indirect_trust_to_others
 
     # Fitnessスコア計算 (論文 Eq. 1)
+    #TODO : window size p を考慮する
     def _calculate_fitness_score(self, uav):
         if not uav.neighbors:
             return 0.0
@@ -102,7 +104,10 @@ class TdlsFanetSimulation:
             if v is not None:
                 vals.append(v)
         # 2) 各評価者がもつuav_jへの信頼値平均を計算
-        avg_hybrid_by_target = float(np.mean(vals))
+        if not vals:
+            avg_hybrid_by_target = 0.5 # 評価者がいない場合はデフォルト値
+        else:
+            avg_hybrid_by_target = float(np.mean(vals))
         # 3) Fitness と重み付けして最終信頼に反映
         final_trust = (
             self.config.B_COEFFICIENT_FITNESS * fitness_score
@@ -162,10 +167,7 @@ class TdlsFanetSimulation:
                 if sum_of_distances == 0:
                     score = member.trust_score
                 else:
-                    k = len(member.neighbors)
-                    mu = member.trust_score
-                    sampled_score = float(np.random.normal(mu, np.sqrt(1.0 / k)))
-                    score = sampled_score / sum_of_distances
+                    score = member.trust_score / sum_of_distances
                 leader_scores.append((score, member))
 
             # スコアでソートし、リーダーとサブリーダーを決定
@@ -299,3 +301,31 @@ class TdlsFanetSimulation:
         plt.legend()
         plt.tight_layout()
         plt.show()
+        
+    def save_trust_history_to_csv(self, filename="trust_history.csv"):
+        """信頼度の履歴をCSVファイルに保存する"""
+        print(f"信頼度履歴を {filename} に保存しています...")
+        header = ['time'] + [f'UAV_{i}_trust' for i in range(self.config.NUM_DRONES)]
+        
+        # timeの長さを基準にデータ行を作成
+        num_data_points = len(self.history['time'])
+        rows = []
+        for i in range(num_data_points):
+            time_point = self.history['time'][i]
+            row = [time_point]
+            for drone_id in range(self.config.NUM_DRONES):
+                # 各ドローンの信頼度リストに十分なデータがあるか確認
+                if i < len(self.history['trust'][drone_id]):
+                    row.append(self.history['trust'][drone_id][i])
+                else:
+                    row.append(None)  # データがない場合は空欄
+            rows.append(row)
+
+        try:
+            with open(filename, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+                writer.writerows(rows)
+            print(f"{filename} の保存が完了しました。")
+        except IOError as e:
+            print(f"ファイルの書き込み中にエラーが発生しました: {e}")

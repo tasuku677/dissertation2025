@@ -15,9 +15,12 @@ async def main():
         # シミュレーションが正常終了またはエラーで停止した場合でも、
         # 最終的な結果グラフを表示する
         print("シミュレーション終了。結果グラフを表示します。")
+        simulation.save_trust_history_to_csv("trust_history.csv")
         simulation.plot_results()
+        
         # simulation.plot_trust([ drone.id for drone in simulation.drones])
-        simulation.plot_trust([0, 1, 2, 3, 4, 5])  # ドローンID 0-5の信頼度履歴を表示
+        simulation.plot_trust()  # ドローンID 0-5の信頼度履歴を表示
+
         
 if __name__ == '__main__':
     asyncio.run(main())
