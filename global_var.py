@@ -20,4 +20,7 @@ class SimConfig:
     B_COEFFICIENT_FITNESS = 0.5 # a*F_i + b*HT_i の 'a'
     B_COEFFICIENT_HYBRID = 0.5 # a*F_i + b*HT_i の 'b'
     
+    d_sigma = 0.4  # 分散の仮定値
+    ind_sigma = 0.1  # indirect trust の分散の仮定値
+    
     

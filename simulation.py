@@ -23,17 +23,19 @@ class TdlsFanetSimulation:
 
 
     # Algorithm 2: 直接信頼度の計算 (簡略版)
-    def update_direct_trust(self, uav_x): #uav_x から見た隣接ノード uav_j の直接信頼値を求める．
+    def update_direct_trust(self, uav_x): #uav_x から見た隣接ノード郡 uav_j の直接信頼値を求める．
         """
         引数：評価者 uav_x,
         返り値：辞書 uav_x の隣接ノード郡 uav_id: trust_value,
         """
         metrics = normalize_components(uav_x)  # {neighbor_id: {'ss','pdr','energy','delay'}}
         if not metrics:
-            uav_x.direct_trust_to_neightbors = {}
             return uav_x.direct_trust_to_neightbors
-        trust_map = {}
         for uav_j in uav_x.neighbors:
+            
+            if uav_j.id not in uav_x.direct_trust_to_neightbors:
+                uav_x.direct_trust_to_neightbors[uav_j.id] = 0.5 # 初期値
+                
             m = metrics.get(uav_j.id)
             if m is None:
                 continue
@@ -44,8 +46,7 @@ class TdlsFanetSimulation:
                 direct_trust = 0.5 * (1.5 ** total_weight)
             else:
                 direct_trust = 0.5 * (0.5 ** total_weight)
-            trust_map[uav_j.id] = direct_trust
-        uav_x.direct_trust_to_neightbors = trust_map
+            uav_x.direct_trust_to_neightbors[uav_j.id] = direct_trust
         return uav_x.direct_trust_to_neightbors
 
     # Algorithm 3: 間接信頼度の計算
@@ -105,7 +106,7 @@ class TdlsFanetSimulation:
                 vals.append(v)
         # 2) 各評価者がもつuav_jへの信頼値平均を計算
         if not vals:
-            avg_hybrid_by_target = 0.5 # 評価者がいない場合はデフォルト値
+            avg_hybrid_by_target = 0 # 評価者がいない場合はデフォルト値
         else:
             avg_hybrid_by_target = float(np.mean(vals))
         # 3) Fitness と重み付けして最終信頼に反映
@@ -213,6 +214,7 @@ class TdlsFanetSimulation:
 
         
     async def run_uav_task(self, drone):
+        #TODO: パケット受け取る度に保持データを更新する
         """個々のUAVの1ステップ分のタスク"""
         await drone.move(self.config.TIME_STEP)
         drone.update_neighbors(self.drones)

@@ -59,7 +59,7 @@ class UAV:
                 packet: Packet = await asyncio.wait_for(self.inbox.get(), timeout=1.0)
                 
                 print(f"📦 Packet received by {self.id} from {packet.source_id}, data: '{packet.data}'")
-                # ここで受信したデータに応じた処理を行う (例: 信頼度更新のトリガーなど)
+                # TODO:ここで受信したデータに応じた処理を行う (例: 信頼度更新のトリガーなど)
                 self.inbox.task_done()
                 
             except asyncio.TimeoutError:
