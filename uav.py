@@ -18,14 +18,15 @@ class UAV:
         self.energy = config.INITIAL_ENERGY
         self.trust_score = config.INITIAL_TRUST
         
-        self.neighbors = []
+        self.neighbors:list[UAV] = [] # 通信範囲内の隣接ドローン, UAVオブジェクトのリスト TODO: 隣接ノードを格納するときに，オブジェクトをコピーすれば，その時間での情報を保存できる？
         self.direct_trust_to_neightbors = {}  # 各隣接ドローンに対する信頼度 uav_id: trust_value
         self.indirect_trust_to_others = {} # 同一クラスタ内の他のドローンに対する間接信頼度 uav_id: trust_value
         self.hybrid_trust_to_others = {} # 同一クラスタ内の他のドローンに対する最終信頼度 uav_id: trust_value
         self.cluster_id = self.id // 10
         self.is_leader = False
         self.is_sub_leader = False
-        self.type = random.choice(['good', 'neutral', 'bad']) # ドローンの種類
+        # self.type = random.choice(['good', 'neutral', 'bad']) # ドローンの種類
+        self.type = 'good'
         self.pdr = self.sample_pdr(self.type)
         self.delay = self.sample_delay(self.type)  # 通信遅延のサンプル
         

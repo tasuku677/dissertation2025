@@ -2,7 +2,7 @@ class SimConfig:
     C = 2.99792458 * 1e8 # 光速 (m/s)
     F = 2.4 * 1e9 # 周波数 (Hz) - 2.4GHz
     
-    NUM_DRONES = 50
+    NUM_DRONES = 20
     AREA_SIZE = (800, 600, 400)  # X, Y, Z (m)
     SIM_DURATION = 40  # seconds
     TIME_STEP = 1  # 1秒ごとにシミュレーションを更新
@@ -20,7 +20,8 @@ class SimConfig:
     B_COEFFICIENT_FITNESS = 0.5 # a*F_i + b*HT_i の 'a'
     B_COEFFICIENT_HYBRID = 0.5 # a*F_i + b*HT_i の 'b'
     
-    d_sigma = 0.4  # 分散の仮定値
-    ind_sigma = 0.1  # indirect trust の分散の仮定値
+    init_sigma = 10  # 初期分散の仮定値
+    d_sigma = 5  # 分散の仮定値
+    ind_sigma = 1  # indirect trust の分散の仮定値
     
     

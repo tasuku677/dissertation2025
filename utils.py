@@ -13,8 +13,8 @@ def _calculate_signal_strength(distance:float):
     ss = 10 ** (ss / 10) # mWに変換
     return ss
 
-def normalize_components(uav_i:UAV):
-    if not uav_i.neighbors:
+def normalize_components(uav_x:UAV):
+    if not uav_x.neighbors:
         return {}
     # 各指標の「隣接ごとの値」をまず集計
     ss_raw = {}
@@ -23,8 +23,8 @@ def normalize_components(uav_i:UAV):
     delay_raw = {}
 
     #TODO: delayをパケットの数とそのデータサイズの合計にする
-    for uav_j in uav_i.neighbors:
-        dist = np.linalg.norm(uav_i.pos - uav_j.pos)
+    for uav_j in uav_x.neighbors:
+        dist = np.linalg.norm(uav_x.pos - uav_j.pos)
         ss_raw[uav_j.id] = _calculate_signal_strength(dist) / 3.24
         pdr_raw[uav_j.id] = uav_j.sample_pdr(uav_j.type)
         energy_raw[uav_j.id] = min(uav_j.energy / SimConfig.INITIAL_ENERGY, 1.0)
@@ -53,3 +53,20 @@ def normalize_components(uav_i:UAV):
             'delay': delay_norm[nid],
         }
     return metrics_by_neighbor
+
+def combine_gaussians(means, variances):
+    """
+    Combine multiple independent Gaussian distributions N(mu_i, sigma_i^2)
+    into a single equivalent Gaussian N(mu*, sigma*^2).
+    
+    Parameters:
+        means (list or np.ndarray): 各ガウス分布の平均 μ_i
+        variances (list or np.ndarray): 各ガウス分布の分散 σ_i^2
+
+    Returns:
+        (mu_star, var_star): 合成後の平均と分散
+    """
+    precisions = 1 / np.array(variances)  # 分散の逆数 = precision（精度）
+    var_star = 1 / np.sum(precisions)
+    mu_star = var_star * np.sum(np.array(means) * precisions)
+    return mu_star, var_star
