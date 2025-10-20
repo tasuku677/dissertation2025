@@ -21,6 +21,14 @@ class TdlsFanetSimulation:
         # 描画クラス
         self.visualizer = LiveVisualizer(config.AREA_SIZE, self.drones)
 
+    def reset(self):
+        """シミュレーションの状態をリセットする"""
+        print("シミュレーションの状態をリセットしています...")
+        for drone in self.drones:
+            drone.reset()
+        self.clusters = {}
+        self.history = {'time': [], 'energy': [], 'delay': [], 'pdr': [], 'trust': {i:[] for i in range(self.config.NUM_DRONES)}}
+        # LiveVisualizerはリセットせずに再利用する
 
     # Algorithm 2: 直接信頼度の計算 (簡略版)
     def update_direct_trust(self, uav_x): #uav_x から見た隣接ノード郡 uav_j の直接信頼値を求める．
@@ -153,7 +161,7 @@ class TdlsFanetSimulation:
             for other_drone in sorted_drones:
                 if other_drone.id not in processed_drones:
                     dist = np.linalg.norm(drone.pos - other_drone.pos)
-                    if dist < self.config.COMM_RANGE and len(new_cluster) < 10:
+                    if dist < self.config.COMM_RANGE :
                         new_cluster.append(other_drone)
                         other_drone.cluster_id = cluster_id_counter
                         processed_drones.add(other_drone.id)
@@ -299,7 +307,6 @@ class TdlsFanetSimulation:
         axs[2].set_ylabel('Delay (ms)')
 
         plt.tight_layout()
-        plt.show()
         
     # trustの推移をプロット    
     def plot_trust(self, uav_ids=None):
@@ -314,7 +321,6 @@ class TdlsFanetSimulation:
         plt.ylim(0, 1.1)
         plt.legend()
         plt.tight_layout()
-        plt.show()
         
     def save_trust_history_to_csv(self, filename="trust_history.csv"):
         """信頼度の履歴をCSVファイルに保存する"""
@@ -343,3 +349,56 @@ class TdlsFanetSimulation:
             print(f"{filename} の保存が完了しました。")
         except IOError as e:
             print(f"ファイルの書き込み中にエラーが発生しました: {e}")
+            
+    def plot_aggregated_trust(self):
+        """全ノードの信頼値の平均、最大、最小値をプロットする"""
+        # グラフのサイズを横に広げてテキスト用のスペースを確保
+        fig = plt.figure(figsize=(12, 6))
+        
+        # history['trust']から信頼値データを2D配列に変換
+        # 行がドローンID、列が時間ステップに対応
+        trust_data = []
+        for i in range(self.config.NUM_DRONES):
+            # データの長さが time と一致する場合のみ追加
+            if len(self.history['trust'][i]) == len(self.history['time']):
+                trust_data.append(self.history['trust'][i])
+        
+        if not trust_data:
+            print("プロットする信頼度データがありません。")
+            plt.close(fig) # プロットするものがない場合はフィギュアを閉じる
+            return
+            
+        trust_array = np.array(trust_data)
+        
+        # 時間軸に沿って平均、最大、最小を計算 (axis=0)
+        avg_trust = np.mean(trust_array, axis=0)
+        max_trust = np.max(trust_array, axis=0)
+        min_trust = np.min(trust_array, axis=0)
+        
+        # プロット
+        plt.plot(self.history['time'], avg_trust, label='Average Trust', color='blue', linewidth=2)
+        plt.plot(self.history['time'], max_trust, label='Maximum Trust', color='green', linestyle='--')
+        plt.plot(self.history['time'], min_trust, label='Minimum Trust', color='red', linestyle='--')
+        
+        # グラフの体裁
+        plt.title('Aggregated Trust of All Nodes over Time')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Trust Value')
+        plt.ylim(0, 1.1)
+        plt.legend(loc='lower left')
+        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+        
+        # global_varの値をテキストとして整形
+        config = self.config
+        param_text = "Simulation Parameters\n-------------------------\n"
+        # SimConfigクラスのすべての属性をループで取得
+        for key, value in config.__class__.__dict__.items():
+            param_text += f"{key}: {value}\n"
+        
+        # テキストをグラフの右側に配置
+        # figtextはFigure座標(0-1)で位置を指定
+        plt.figtext(0.75, 0.85, param_text, ha="left", va="top",
+                    bbox=dict(boxstyle="round,pad=0.5", fc="wheat", alpha=0.5))
+
+        # レイアウトを調整してテキストが重ならないようにする
+        plt.tight_layout(rect=[0, 0, 0.75, 1])
