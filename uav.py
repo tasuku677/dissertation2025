@@ -11,28 +11,38 @@ from packet import Packet
 class UAV:
     def __init__(self, drone_id, config):
         self.id = drone_id
-        # self.pos = np.random.rand(3) * config.AREA_SIZE
-        self.pos = np.array([400.0, 300.0, 200.0])
-        self.velocity = self._get_random_velocity(config.VELOCITY_RANGE)
-        self.destination = np.random.rand(3) * config.AREA_SIZE
-        self.energy = config.INITIAL_ENERGY
-        self.trust_score = config.INITIAL_TRUST
+        self.config = config
         
-        self.neighbors:list[UAV] = [] # 通信範囲内の隣接ドローン, UAVオブジェクトのリスト TODO: 隣接ノードを格納するときに，オブジェクトをコピーすれば，その時間での情報を保存できる？
-        self.direct_trust_to_neightbors = {}  # 各隣接ドローンに対する信頼度 uav_id: trust_value
-        self.indirect_trust_to_others = {} # 同一クラスタ内の他のドローンに対する間接信頼度 uav_id: trust_value
-        self.hybrid_trust_to_others = {} # 同一クラスタ内の他のドローンに対する最終信頼度 uav_id: trust_value
-        self.cluster_id = self.id // 10
+        # 初期状態を保存
+        self.initial_pos = np.random.rand(3) * config.AREA_SIZE
+        self.initial_velocity = self._get_random_velocity(config.VELOCITY_RANGE)
+        self.initial_energy = config.INITIAL_ENERGY
+        
+        # 現在の状態を初期化
+        self.reset()
+
+    def reset(self):
+        """UAVを初期状態にリセットする"""
+        self.pos = self.initial_pos.copy()
+        self.velocity = self.initial_velocity.copy()
+        self.destination = np.random.rand(3) * self.config.AREA_SIZE
+        self.energy = self.initial_energy
+        self.trust_score = self.config.INITIAL_TRUST
+        
+        self.neighbors:list[UAV] = []
+        self.direct_trust_to_neightbors = {}
+        self.indirect_trust_to_others = {}
+        self.hybrid_trust_to_others = {}
+        self.cluster_id = None
         self.is_leader = False
         self.is_sub_leader = False
-        # self.type = random.choice(['good', 'neutral', 'bad']) # ドローンの種類
-        self.type = 'good'
+        self.type = 'good' # or random.choice(['good', 'neutral', 'bad'])
         self.pdr = self.sample_pdr(self.type)
-        self.delay = self.sample_delay(self.type)  # 通信遅延のサンプル
+        self.delay = self.sample_delay(self.type)
         
-        # 非同期通信用の受信ボックス
         self.inbox = asyncio.Queue()
-        self.sent_packets: Dict[int, Packet] = {} # 送信したパケットを追跡 {dest_id: Packet}
+        self.sent_packets: Dict[int, Packet] = {}
+
 
     #TODO: パケット送信ごとにエネルギー消費を考慮
     async def send_packet(self, destination_uav: 'UAV', data: Any, sim_time: float) -> tuple[bool, float]:

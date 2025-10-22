@@ -17,8 +17,7 @@ class TdlsFanetSimulation:
         self.drones = [UAV(i, config) for i in range(config.NUM_DRONES)]
         self.clusters = {} # clusterid: [UAV, UAV, ...]
         # 評価指標記録用
-        self.history = {'time': [], 'energy': [], 'delay': [], 'pdr': [], 'trust': {i:[] for i in range(config.NUM_DRONES)}}
-        # 描画クラス
+        self.history = {'time': [], 'energy': [], 'delay': [], 'pdr': [], 'trust': {i:[] for i in range(config.NUM_DRONES)}, 'cluster_id': {i:[] for i in range(config.NUM_DRONES)}}        # 描画クラス
         self.visualizer = LiveVisualizer(config.AREA_SIZE, self.drones)
 
     def reset(self):
@@ -161,7 +160,7 @@ class TdlsFanetSimulation:
             for other_drone in sorted_drones:
                 if other_drone.id not in processed_drones:
                     dist = np.linalg.norm(drone.pos - other_drone.pos)
-                    if dist < self.config.COMM_RANGE :
+                    if dist < self.config.COMM_RANGE : #TODO: すでにクラスタに属しているドローンが多ければ，追加条件を厳しくすることもアリかも．
                         new_cluster.append(other_drone)
                         other_drone.cluster_id = cluster_id_counter
                         processed_drones.add(other_drone.id)
@@ -268,6 +267,8 @@ class TdlsFanetSimulation:
             self.history['energy'].append(total_energy)
             self.history['pdr'].append(pdr)
             self.history['delay'].append(avg_delay)
+            for drone in self.drones:
+                self.history['cluster_id'][drone.id].append(drone.cluster_id)
             
             # 5. 可視化とログ表示
             self.visualizer.update(self.drones, sim_time=t)
@@ -278,6 +279,33 @@ class TdlsFanetSimulation:
         for task in self.packet_handlers:
             task.cancel()
         await asyncio.gather(*self.packet_handlers, return_exceptions=True)
+        
+    def save_cluster_history_to_csv(self, filename="cluster_history.csv"):
+        """クラスタ所属履歴をCSVファイルに保存する"""
+        print(f"クラスタ所属履歴を {filename} に保存しています...")
+        header = ['time'] + [f'UAV_{i}_cluster_id' for i in range(self.config.NUM_DRONES)]
+        
+        num_data_points = len(self.history['time'])
+        rows = []
+        for i in range(num_data_points):
+            time_point = self.history['time'][i]
+            row = [time_point]
+            for drone_id in range(self.config.NUM_DRONES):
+                if i < len(self.history['cluster_id'][drone_id]):
+                    cluster_id = self.history['cluster_id'][drone_id][i]
+                    row.append( f"{drone_id}_{cluster_id}" if cluster_id is not None else 'N/A')
+                else:
+                    row.append(None)
+            rows.append(row)
+
+        try:
+            with open(filename, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+                writer.writerows(rows)
+            print(f"{filename} の保存が完了しました。")
+        except IOError as e:
+            print(f"ファイルの書き込み中にエラーが発生しました: {e}")
 
 
     def plot_results(self):
