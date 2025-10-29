@@ -41,6 +41,7 @@ class TdlsFanetSimulation:
         for uav_j in uav_x.neighbors:
             if uav_j.id not in uav_x.direct_trust_to_neightbors:
                 uav_x.direct_trust_to_neightbors[uav_j.id] = (0.5, SimConfig.init_sigma) # 初期値
+                continue
             m = metrics.get(uav_j.id)
             if m is None:
                 continue

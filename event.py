@@ -89,10 +89,3 @@ def update(frame):
                 ax.plot([pos_i[0], pos_j[0]],
                         [pos_i[1], pos_j[1]],
                         [pos_i[2], pos_j[2]], color='gray', linestyle='--', linewidth=0.8)
-
-# --- アニメーションの実行 ---
-# 初回描画のために一度updateを呼び出す
-update(0)
-ax.legend()
-ani = FuncAnimation(fig, update, frames=int(SIM_TIME/DELTA_T), interval=100, repeat=False)
-plt.show()

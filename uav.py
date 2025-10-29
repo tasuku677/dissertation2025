@@ -47,9 +47,9 @@ class UAV:
     #TODO: パケット送信ごとにエネルギー消費を考慮
     async def send_packet(self, destination_uav: 'UAV', data: Any, sim_time: float) -> tuple[bool, float]:
         packet = Packet(self.id, destination_uav.id, data, sim_time)
-        self.consume_energy_tx(SimConfig.PACKET_SIZE)
         self.sent_packets[destination_uav.id] = packet
         dist = np.linalg.norm(self.pos - destination_uav.pos)
+        self.consume_energy_tx(SimConfig.PACKET_SIZE, dist)
         transmission_delay = dist / SimConfig.C + self.sample_delay(self.type) #TODO: データサイズの影響を考慮
         await asyncio.sleep(transmission_delay)
         success_prob = destination_uav.trust_score * (1 - dist / (SimConfig.COMM_RANGE * 1.5)) #TODO:これも後で考える
@@ -114,8 +114,21 @@ class UAV:
                 if dist < SimConfig.COMM_RANGE:
                     self.neighbors.append(other)
 
-    def consume_energy_tx(self, packet_size):
-        self.energy -= SimConfig.ENERGY_TX * packet_size
+    def consume_energy_tx(self, packet_size_bits, distance):
+        """
+            送信エネルギーを消費する。
+            energy_consumed = l * E_elec + l * E_amp * d^2
+            packet_size_bits: l (bits)
+            distance: d (meters)
+        """
+
+        E_elec = getattr(self.config, 'E_ELEC', getattr(SimConfig, 'E_ELEC'))
+        E_amp = getattr(self.config, 'E_AMP', getattr(SimConfig, 'E_AMP'))
+
+        # 距離が None や負の場合は 0 とみなす
+        d = max(0.0, distance if distance is not None else 0.0)
+        energy_consumed = packet_size_bits * (E_elec + E_amp * (d ** 2))
+        self.energy -= energy_consumed
      
     def sample_pdr(self, t: str) -> float:
         if t == 'good':
