@@ -23,5 +23,5 @@ class SimConfig:
     init_sigma = 9  # 初期分散の仮定値
     d_sigma = 2  # 分散の仮定値
     
-    E_ELEC = 50e-9      # J/bit (50 nJ/bit)
-    E_AMP = 100e-12     # J/bit/m^2 (100 pJ/bit/m^2)
+    E_ELEC = 50e-9      # J/bit (50 nJ/bit), W_e
+    E_AMP = 100e-12     # J/bit/m^2 (100 pJ/bit/m^2),  W_a

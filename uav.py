@@ -37,23 +37,22 @@ class UAV:
         self.is_leader = False
         self.is_sub_leader = False
         self.type = 'good' # or random.choice(['good', 'neutral', 'bad'])
-        self.pdr = self.sample_pdr(self.type)
-        self.delay = self.sample_delay(self.type)
         
         self.inbox = asyncio.Queue()
-        self.sent_packets: Dict[int, Packet] = {}
+        
+        self.history_out: Dict[int, Dict[str, Any]] = {} #送信履歴 {相手ID: {'sent': int, 'success': int, 'delays': list}}
+        self.history_in: Dict[int, Dict[str, int]] = {} #受信履歴 {相手ID: {'received': int}}
 
-
-    #TODO: パケット送信ごとにエネルギー消費を考慮
     async def send_packet(self, destination_uav: 'UAV', data: Any, sim_time: float) -> tuple[bool, float]:
         packet = Packet(self.id, destination_uav.id, data, sim_time)
-        self.sent_packets[destination_uav.id] = packet
-        dist = np.linalg.norm(self.pos - destination_uav.pos)
+        dist = np.linalg.norm(self.pos - destination_uav.pos) 
         self.consume_energy_tx(SimConfig.PACKET_SIZE, dist)
-        transmission_delay = dist / SimConfig.C + self.sample_delay(self.type) #TODO: データサイズの影響を考慮
+        transmission_delay = dist / SimConfig.C + self._sample_delay(self.type) #TODO: データサイズの影響を考慮 #TODO# 相手が 'bad' なら遅延が増加するようにしても良い
         await asyncio.sleep(transmission_delay)
-        success_prob = destination_uav.trust_score * (1 - dist / (SimConfig.COMM_RANGE * 1.5)) #TODO:これも後で考える
-        if random.random() < success_prob:
+        
+        # ★ 変更: 成功確率は相手(受信側)のタイプに基づく
+        success = destination_uav.receive_packet(packet)
+        if success:
             await destination_uav.inbox.put(packet)
             # print(f"✅ Packet sent: {self.id} -> {destination_uav.id}")
             return True, transmission_delay # 成功フラグと遅延を返す
@@ -67,20 +66,36 @@ class UAV:
         while True:
             try:
                 # タイムアウトを設けて、シミュレーション終了時にタスクを停止できるようにする
-                packet: Packet = await asyncio.wait_for(self.inbox.get(), timeout=1.0)
+                packet: Packet = await self.inbox.get()
+                
+                source_id = packet.source_id
+                if source_id not in self.history_in:
+                    self.history_in[source_id] = {'received': 0}
+                self.history_in[source_id]['received'] += 1
                 
                 print(f"📦 Packet received by {self.id} from {packet.source_id}, data: '{packet.data}'")
                 # TODO:ここで受信したデータに応じた処理を行う (例: 信頼度更新のトリガーなど)
                 self.inbox.task_done()
                 
-            except asyncio.TimeoutError:
-                # タイムアウトした場合はループを継続
-                pass
             except asyncio.CancelledError:
                 # タスクがキャンセルされたらループを抜ける
                 break
+            except Exception as e:
+                # その他の予期せぬエラー
+                print(f"Error in packet_handler for UAV {self.id}: {e}")
+                break
 
-
+    def receive_packet(self, packet: Packet) -> bool:
+        """
+        UAVのタイプに基づき、パケット受信(中継)の成否を返す
+        """
+        if self.type == 'good':
+            return random.random() < 0.95  # 正常ノードは100%成功
+        elif self.type == 'neutral':
+            return random.random() < 0.7 # 80%の確率で成功(True)
+        elif self.type == 'bad':
+            return random.random() < 0.2 # 50%の確率で破棄(False)
+    
     def _get_random_velocity(self, v_range):
         speed = random.uniform(v_range[0], v_range[1])
         direction = np.random.rand(3) - 0.5
@@ -130,18 +145,12 @@ class UAV:
         energy_consumed = packet_size_bits * (E_elec + E_amp * (d ** 2))
         self.energy -= energy_consumed
      
-    def sample_pdr(self, t: str) -> float:
-        if t == 'good':
-            return random.uniform(0.95, 1.0)
-        elif t == 'neutral':
-            return random.uniform(0.7, 0.94)
-        else:  # 'bad'
-            return random.uniform(0.1, 0.5)
         
-    def sample_delay(self, t:str)-> float:
+    def _sample_delay(self, t:str)-> float:
         if t == 'good':
             return random.uniform(0.01, 0.05) # seconds
         elif t == 'neutral':
             return random.uniform(0.05, 0.1)
         else:  # 'bad'
             return random.uniform(0.1, 0.5)
+        

@@ -29,30 +29,39 @@ class TdlsFanetSimulation:
         self.history = {'time': [], 'energy': [], 'delay': [], 'pdr': [], 'trust': {i:[] for i in range(self.config.NUM_DRONES)}}
         # LiveVisualizerはリセットせずに再利用する
 
-    # Algorithm 2: 直接信頼度の計算 (簡略版)
+    # Algorithm 2: 直接信頼度の計算 #TODO: 各ノードが保持する隣接ノード情報を活用するように変更
     def update_direct_trust(self, uav_x): #uav_x から見た隣接ノード郡 uav_j の直接信頼値を求める．
         """
         引数：評価者 uav_x,
         返り値：辞書 uav_x の隣接ノード郡 uav_id: trust_value,
         """
-        metrics = normalize_components(uav_x)  # {neighbor_id: {'ss','pdr','energy','delay'}}
+        metrics = normalize_components(uav_x)  # {neighbor_id: {'ss','pdr','energy','delay'}} ->  TODO:{neighbor_id: {'time', 'ss','pdr','energy','delay'}}更新時の時間を追跡．この時間が古いと分散も大きくする
         if not metrics:
             return uav_x.direct_trust_to_neightbors
         for uav_j in uav_x.neighbors:
             if uav_j.id not in uav_x.direct_trust_to_neightbors:
                 uav_x.direct_trust_to_neightbors[uav_j.id] = (0.5, SimConfig.init_sigma) # 初期値
-                continue
-            m = metrics.get(uav_j.id)
+            
+            m = metrics.get(uav_j.id, None)
             if m is None:
                 continue
             total_weight = 0.25 * m['ss'] + 0.25 * m['pdr'] + 0.25 * m['energy'] + 0.25 * m['delay']
             if total_weight >= 0.7:
-                direct_trust = 0.5 * (2 ** total_weight)
+                direct_trust_mu = 0.5 * (2 ** total_weight)
             elif total_weight >= 0.3:
-                direct_trust = 0.5 * (1.5 ** total_weight)
+                direct_trust_mu = 0.5 * (1.5 ** total_weight)
             else:
-                direct_trust = 0.5 * (0.5 ** total_weight)
-            uav_x.direct_trust_to_neightbors[uav_j.id] = (direct_trust, SimConfig.d_sigma) # 信頼値と分散をセット
+                direct_trust_mu = 0.5 * (0.5 ** total_weight)
+            
+            n_obs = uav_x.history_out.get(uav_j.id, {}).get('sent', 0)
+            if n_obs == 0:
+                direct_trust_sigma_sq = SimConfig.init_sigma
+            else:
+                p = direct_trust_mu
+                beta_var = (p * (1 - p)) / (n_obs + 2)
+                direct_trust_sigma_sq = max(beta_var, 1e-6)
+                
+            uav_x.direct_trust_to_neightbors[uav_j.id] = (direct_trust_mu, direct_trust_sigma_sq) # 信頼値と分散をセット
         return uav_x.direct_trust_to_neightbors
 
     # Algorithm 3: 間接信頼度の計算
@@ -82,7 +91,7 @@ class TdlsFanetSimulation:
     
 
     # Fitnessスコア計算 (論文 Eq. 1)
-    #TODO : window size p を考慮する
+    #TODO : window size p を考慮する　時間pごとに再計算する．
     def _calculate_fitness_score(self, uav):
         if not uav.neighbors:
             return 0.0
@@ -202,8 +211,8 @@ class TdlsFanetSimulation:
 
     async def _simulate_communication(self, t: int) -> Tuple[float, float]:
         """パケット送受信をシミュレートし、PDRと平均遅延を返す"""
-        tasks = []
-        total_packets = 0
+        tasks_with_context: List[Tuple[asyncio.Task, UAV, UAV]] = []
+        total_packets_attempted = 0
         successful_packets = 0
         total_delay = 0
 
@@ -212,23 +221,41 @@ class TdlsFanetSimulation:
             if not leader: continue
 
             for member in members:
-                if not member.is_leader:
-                    total_packets += 1
-                    # send_packetをawaitし、成功したかどうかのbool値と遅延を受け取る
-                    task = asyncio.create_task(member.send_packet(leader, data=f"Status report from {member.id}", sim_time=t))
-                    tasks.append((task, member, leader)) # タスクと関連UAVをタプルで保存
+                if not member.is_leader and member.cluster_id == leader.cluster_id:
+                    total_packets_attempted += 1
+                    task = asyncio.create_task(member.send_packet(leader, data=f"Msg from {member.id}", sim_time=t))
+                    # ★変更: 送信者(member)と受信者(leader)をタスクと共に保存
+                    tasks_with_context.append((task, member, leader))
 
-        # 全ての送信タスクの完了を待つ
-        results = await asyncio.gather(*[t[0] for t in tasks])
+        for task, member, leader in tasks_with_context:
+            try:
+                success, delay = await task
+                # --- ★ 送信履歴 (History OUT) の記録 (PDR計算用) ---
+                if leader.id not in member.history_out:
+                    member.history_out[leader.id] = {'sent': 0, 'success': 0, 'delays': []}
+                
+                history = member.history_out[leader.id]
+                history['sent'] += 1
+                
+                if success:
+                    history['success'] += 1
+                    history['delays'].append(delay)
+                    
+                    # グローバルPDR/Delay集計
+                    successful_packets += 1
+                    total_delay += delay
+                
+                # (失敗時は sent のみインクリメント)
 
-        # 結果を集計
-        for (task, member, leader), (success, delay) in zip(tasks, results):
-            if success:
-                successful_packets += 1
-            total_delay += delay
+            except Exception as e:
+                print(f"Error in communication task: {e}")
+                # タスク失敗時も 'sent' としてカウント (ただし success=0)
+                if leader.id not in member.history_out:
+                    member.history_out[leader.id] = {'sent': 0, 'success': 0, 'delays': []}
+                member.history_out[leader.id]['sent'] += 1
 
-        pdr = successful_packets / total_packets if total_packets > 0 else 1.0
-        avg_delay = total_delay / total_packets if total_packets > 0 else 0.0
+        pdr = successful_packets / total_packets_attempted if total_packets_attempted > 0 else 1.0
+        avg_delay = total_delay / total_packets_attempted if total_packets_attempted > 0 else 0.0
         return pdr, avg_delay
 
         

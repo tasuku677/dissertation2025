@@ -10,8 +10,8 @@ from global_var import SimConfig
 def _calculate_signal_strength(distance:float): 
     fspl =  20 * math.log10((4 * math.pi * distance * SimConfig.F) / SimConfig.C)
     ss = (20 - fspl)  # dbm 
-    ss = 10 ** (ss / 10) # mWに変換
-    return ss
+    ss_mw = 10 ** (ss / 10) # mW
+    return ss_mw
 
 def normalize_components(uav_x:UAV):
     if not uav_x.neighbors:
@@ -22,13 +22,23 @@ def normalize_components(uav_x:UAV):
     energy_raw = {}
     delay_raw = {}
 
-    #TODO: delayをパケットの数とそのデータサイズの合計にする
     for uav_j in uav_x.neighbors:
         dist = np.linalg.norm(uav_x.pos - uav_j.pos)
         ss_raw[uav_j.id] = _calculate_signal_strength(dist) / 3.24
-        pdr_raw[uav_j.id] = uav_j.sample_pdr(uav_j.type)
         energy_raw[uav_j.id] = min(uav_j.energy / SimConfig.INITIAL_ENERGY, 1.0)
-        delay_raw[uav_j.id] = (2.45 - uav_j.sample_delay(uav_j.type)) / 1.54
+        
+        history = uav_x.history_out.get(uav_j.id)
+        if history and history['sent'] > 0:
+            pdr_raw[uav_j.id] = history['success'] / history['sent']
+            # 平均遅延 (Delay)
+            if history['delays']:
+                delay_raw[uav_j.id] = (1.45 - np.sum(history['delays']))/1.54
+            else:
+                delay_raw[uav_j.id] = 0.0 # 成功パケットなし = 遅延評価0 (最低評価)
+        else:
+            # 通信履歴がない場合 (PDR 0, 遅延評価 0)
+            pdr_raw[uav_j.id] = 0.0
+            delay_raw[uav_j.id] = 0.0
 
     # コンポーネントごとに min-max 正規化（全て同値なら 0.5 固定）
     def minmax_dict(d: dict[int, float]) -> dict[int, float]:
