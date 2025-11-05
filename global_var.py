@@ -2,7 +2,7 @@ class SimConfig:
     C = 2.99792458 * 1e8 # 光速 (m/s)
     F = 2.4 * 1e9 # 周波数 (Hz) - 2.4GHz
     
-    NUM_DRONES = 20
+    NUM_DRONES = 50
     AREA_SIZE = (800, 600, 400)  # X, Y, Z (m)
     SIM_DURATION = 40  # seconds
     TIME_STEP = 1  # 1秒ごとにシミュレーションを更新

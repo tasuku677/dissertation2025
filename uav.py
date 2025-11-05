@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 
 from global_var import SimConfig
-from packet import Packet
+from packet import Packet, TelemetryPayload
 
 # --- UAV (ドローン) クラス ---
 class UAV:
@@ -30,7 +30,7 @@ class UAV:
         self.trust_score = self.config.INITIAL_TRUST
         
         self.neighbors:list[UAV] = []
-        self.direct_trust_to_neightbors = {}
+        self.direct_trust_to_neighbors = {}
         self.indirect_trust_to_others = {}
         self.hybrid_trust_to_others = {}
         self.cluster_id = None
@@ -42,9 +42,10 @@ class UAV:
         
         self.history_out: Dict[int, Dict[str, Any]] = {} #送信履歴 {相手ID: {'sent': int, 'success': int, 'delays': list}}
         self.history_in: Dict[int, Dict[str, int]] = {} #受信履歴 {相手ID: {'received': int}}
+        self.packet_payload_history: Dict[int, TelemetryPayload] = {} # 受信したペイロード履歴 {送信者ID: Payload}
 
-    async def send_packet(self, destination_uav: 'UAV', data: Any, sim_time: float) -> tuple[bool, float]:
-        packet = Packet(self.id, destination_uav.id, data, sim_time)
+    async def send_packet(self, destination_uav: 'UAV', payload: TelemetryPayload, sim_time: float) -> tuple[bool, float]:
+        packet = Packet(self.id, destination_uav.id, payload, sim_time)
         dist = np.linalg.norm(self.pos - destination_uav.pos) 
         self.consume_energy_tx(SimConfig.PACKET_SIZE, dist)
         transmission_delay = dist / SimConfig.C + self._sample_delay(self.type) #TODO: データサイズの影響を考慮 #TODO# 相手が 'bad' なら遅延が増加するようにしても良い
@@ -73,7 +74,9 @@ class UAV:
                     self.history_in[source_id] = {'received': 0}
                 self.history_in[source_id]['received'] += 1
                 
-                print(f"📦 Packet received by {self.id} from {packet.source_id}, data: '{packet.data}'")
+                self.packet_payload_history[source_id] = packet.payload
+                
+                print(f"📦 Packet received by {self.id} from {packet.source_id}, data: '{packet.payload}'")
                 # TODO:ここで受信したデータに応じた処理を行う (例: 信頼度更新のトリガーなど)
                 self.inbox.task_done()
                 
@@ -127,7 +130,7 @@ class UAV:
             if self.id != other.id:
                 dist = np.linalg.norm(self.pos - other.pos)
                 if dist < SimConfig.COMM_RANGE:
-                    self.neighbors.append(other)
+                    self.neighbors.append(other.id)
 
     def consume_energy_tx(self, packet_size_bits, distance):
         """

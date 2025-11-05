@@ -3,10 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from typing import Tuple
 import csv
+import copy
 
 from draw import LiveVisualizer
 from uav import UAV 
-from packet import Packet 
+from packet import TelemetryPayload
 from utils import *
 
 
@@ -37,12 +38,12 @@ class TdlsFanetSimulation:
         """
         metrics = normalize_components(uav_x)  # {neighbor_id: {'ss','pdr','energy','delay'}} ->  TODO:{neighbor_id: {'time', 'ss','pdr','energy','delay'}}更新時の時間を追跡．この時間が古いと分散も大きくする
         if not metrics:
-            return uav_x.direct_trust_to_neightbors
-        for uav_j in uav_x.neighbors:
-            if uav_j.id not in uav_x.direct_trust_to_neightbors:
-                uav_x.direct_trust_to_neightbors[uav_j.id] = (0.5, SimConfig.init_sigma) # 初期値
-            
-            m = metrics.get(uav_j.id, None)
+            return uav_x.direct_trust_to_neighbors
+        for uav_j_id in uav_x.neighbors:
+            if uav_j_id not in uav_x.direct_trust_to_neighbors:
+                uav_x.direct_trust_to_neighbors[uav_j_id] = (0.5, SimConfig.init_sigma) # 初期値
+                continue
+            m = metrics.get(uav_j_id, None)
             if m is None:
                 continue
             total_weight = 0.25 * m['ss'] + 0.25 * m['pdr'] + 0.25 * m['energy'] + 0.25 * m['delay']
@@ -53,7 +54,7 @@ class TdlsFanetSimulation:
             else:
                 direct_trust_mu = 0.5 * (0.5 ** total_weight)
             
-            n_obs = uav_x.history_out.get(uav_j.id, {}).get('sent', 0)
+            n_obs = uav_x.history_out.get(uav_j_id, {}).get('sent', 0)
             if n_obs == 0:
                 direct_trust_sigma_sq = SimConfig.init_sigma
             else:
@@ -61,8 +62,8 @@ class TdlsFanetSimulation:
                 beta_var = (p * (1 - p)) / (n_obs + 2)
                 direct_trust_sigma_sq = max(beta_var, 1e-6)
                 
-            uav_x.direct_trust_to_neightbors[uav_j.id] = (direct_trust_mu, direct_trust_sigma_sq) # 信頼値と分散をセット
-        return uav_x.direct_trust_to_neightbors
+            uav_x.direct_trust_to_neighbors[uav_j_id] = (direct_trust_mu, direct_trust_sigma_sq) # 信頼値と分散をセット
+        return uav_x.direct_trust_to_neighbors
 
     # Algorithm 3: 間接信頼度の計算
     def update_indirect_trust(self, uav_x): # uav_x から見たノード uav_j の間接信頼値を求める．
@@ -73,19 +74,23 @@ class TdlsFanetSimulation:
         if not uav_x.neighbors:
             return {}
     
-        for uav_j in self.clusters.get(uav_x.cluster_id, []): #クラスタ内の全ノードに対して．被評価ノード:uav_j
-            if uav_j.id == uav_x.id:
+        for uav_j_id in self.clusters.get(uav_x.cluster_id, []): #クラスタ内の全ノードに対して．被評価ノード:uav_j
+            if uav_j_id == uav_x.id:
                 continue
             recommendations = [] 
-            for neighbor_k in uav_x.neighbors: # 隣接ノード k が評価対象 uav_j の信頼値をノードiにリコメンドする 
-                rec = neighbor_k.direct_trust_to_neightbors.get(uav_j.id, (self.config.INITIAL_TRUST, self.config.init_sigma))
+            for neighbor_k_id in uav_x.neighbors: # 隣接ノード k が評価対象 uav_j の信頼値をノードiにリコメンドする 
+                payload = uav_x.packet_payload_history.get(neighbor_k_id)
+                if payload and uav_j_id in payload.direct_trust_to_neighbors:
+                    rec = payload.direct_trust_to_neighbors[uav_j_id]
+                else:
+                    rec = (self.config.INITIAL_TRUST, self.config.init_sigma)
                 recommendations.append(rec)
             
             if not recommendations:
                 avg_rec_mu, avg_rec_star = self.config.INITIAL_TRUST, self.config.init_sigma
             else:
                 avg_rec_mu, avg_rec_star = combine_gaussians([r[0] for r in recommendations], [r[1] for r in recommendations])
-            uav_x.indirect_trust_to_others[uav_j.id] = (avg_rec_mu, avg_rec_star)
+            uav_x.indirect_trust_to_others[uav_j_id] = (avg_rec_mu, avg_rec_star)
         return uav_x.indirect_trust_to_others
     
     
@@ -120,7 +125,7 @@ class TdlsFanetSimulation:
             if uav_x.id == uav_j.id:
                 continue
             
-            direct_trust = uav_x.direct_trust_to_neightbors.get(uav_j.id, (self.config.INITIAL_TRUST, self.config.init_sigma))
+            direct_trust = uav_x.direct_trust_to_neighbors.get(uav_j.id, (self.config.INITIAL_TRUST, self.config.init_sigma))
             indirect_trust = uav_x.indirect_trust_to_others.get(uav_j.id, (self.config.INITIAL_TRUST, self.config.init_sigma))
             
             # ハイブリッド信頼を計算
@@ -213,28 +218,40 @@ class TdlsFanetSimulation:
         """パケット送受信をシミュレートし、PDRと平均遅延を返す"""
         tasks_with_context: List[Tuple[asyncio.Task, UAV, UAV]] = []
         total_packets_attempted = 0
+
+        # 各UAVが隣接ノードにパケットを送信するタスクを作成
+        for sender in self.drones:
+            # 送信するペイロードを生成
+            # TODO: neighborsやdirect_trustsはディープコピーが望ましい
+            payload = TelemetryPayload(
+                energy=sender.energy,
+                trust=sender.trust_score,
+                pos=sender.pos,
+                neighbors=sender.neighbors,
+                direct_trust_to_neighbors=copy.deepcopy(sender.direct_trust_to_neighbors),
+                cluster_id=sender.cluster_id,
+                role="leader" if sender.is_leader else "sub" if sender.is_sub_leader else "member"
+            )
+            
+            for neighbor_id in sender.neighbors:
+                total_packets_attempted += 1
+                neighbor = self.drones[neighbor_id]
+                task = asyncio.create_task(sender.send_packet(neighbor, payload, sim_time=t))
+                # 送信者(sender)と受信者(neighbor)をタスクと共に保存
+                tasks_with_context.append((task, sender, neighbor_id))
+
         successful_packets = 0
         total_delay = 0
 
-        for _, members in self.clusters.items():
-            leader = next((m for m in members if m.is_leader), None)
-            if not leader: continue
-
-            for member in members:
-                if not member.is_leader and member.cluster_id == leader.cluster_id:
-                    total_packets_attempted += 1
-                    task = asyncio.create_task(member.send_packet(leader, data=f"Msg from {member.id}", sim_time=t))
-                    # ★変更: 送信者(member)と受信者(leader)をタスクと共に保存
-                    tasks_with_context.append((task, member, leader))
-
-        for task, member, leader in tasks_with_context:
+        # 全ての送信タスクの完了を待つ
+        for task, sender, receiver_id in tasks_with_context:
             try:
                 success, delay = await task
-                # --- ★ 送信履歴 (History OUT) の記録 (PDR計算用) ---
-                if leader.id not in member.history_out:
-                    member.history_out[leader.id] = {'sent': 0, 'success': 0, 'delays': []}
+                # --- 送信履歴 (History OUT) の記録 (PDR計算用) ---
+                if receiver_id not in sender.history_out:
+                    sender.history_out[receiver_id] = {'sent': 0, 'success': 0, 'delays': []}
                 
-                history = member.history_out[leader.id]
+                history = sender.history_out[receiver_id]
                 history['sent'] += 1
                 
                 if success:
@@ -244,15 +261,13 @@ class TdlsFanetSimulation:
                     # グローバルPDR/Delay集計
                     successful_packets += 1
                     total_delay += delay
-                
-                # (失敗時は sent のみインクリメント)
 
             except Exception as e:
-                print(f"Error in communication task: {e}")
-                # タスク失敗時も 'sent' としてカウント (ただし success=0)
-                if leader.id not in member.history_out:
-                    member.history_out[leader.id] = {'sent': 0, 'success': 0, 'delays': []}
-                member.history_out[leader.id]['sent'] += 1
+                print(f"Error in communication task from {sender.id} to {receiver_id}: {e}")
+                # タスク失敗時も 'sent' としてカウント
+                if receiver_id not in sender.history_out:
+                    sender.history_out[receiver_id] = {'sent': 0, 'success': 0, 'delays': []}
+                sender.history_out[receiver_id]['sent'] += 1
 
         pdr = successful_packets / total_packets_attempted if total_packets_attempted > 0 else 1.0
         avg_delay = total_delay / total_packets_attempted if total_packets_attempted > 0 else 0.0
