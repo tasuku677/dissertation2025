@@ -12,6 +12,11 @@ class TelemetryPayload:
         self.cluster_id = cluster_id
         self.role = role
 
+class ClusterReportPayload:
+    """クラスタメンバーからリーダーへの報告用ペイロード"""
+    def __init__(self, member_id: int):
+        self.member_id = member_id
+
 
 class Packet:
     def __init__(self, source_id: int, dest_id: int, payload: TelemetryPayload, timestamp: float):

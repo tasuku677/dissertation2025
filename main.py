@@ -27,7 +27,8 @@ async def main():
         print("シミュレーション終了。結果をファイルに保存します。")
         simulation.save_trust_history_to_csv(os.path.join(output_dir, f"trust_history_{timestamp}.csv"))
         simulation.save_cluster_history_to_csv(os.path.join(output_dir, f"cluster_history_{timestamp}.csv"))
-
+        simulation.save_report_history_to_csv(os.path.join(output_dir, f"report_history_{timestamp}.csv"))
+        
         # 各プロットを個別のFigureとして作成し、ファイルに保存
         simulation.plot_results()
         plt.savefig(os.path.join(output_dir, f"results_{timestamp}.png"))
@@ -39,6 +40,10 @@ async def main():
 
         simulation.plot_aggregated_trust() # 全ノードの信頼値の統計をプロット
         plt.savefig(os.path.join(output_dir, f"aggregated_trust_{timestamp}.png"))
+        plt.close()
+        
+        simulation.plot_trust_by_type() # タイプ別の平均信頼値をプロット
+        plt.savefig(os.path.join(output_dir, f"trust_by_type_{timestamp}.png"))
         plt.close()
 
         print(f"結果のプロットとCSVを '{output_dir}' フォルダに保存しました。")

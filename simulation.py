@@ -7,7 +7,7 @@ import copy
 
 from draw import LiveVisualizer
 from uav import UAV 
-from packet import TelemetryPayload
+from packet import TelemetryPayload, ClusterReportPayload
 from utils import *
 
 
@@ -16,9 +16,12 @@ class TdlsFanetSimulation:
     def __init__(self, config):
         self.config = config
         self.drones = [UAV(i, config) for i in range(config.NUM_DRONES)]
-        self.clusters = {} # clusterid: [UAV, UAV, ...]
-        # 評価指標記録用
-        self.history = {'time': [], 'energy': [], 'delay': [], 'pdr': [], 'trust': {i:[] for i in range(config.NUM_DRONES)}, 'cluster_id': {i:[] for i in range(config.NUM_DRONES)}}        # 描画クラス
+        self.clusters = {} # clusterid: [UAV, UAV, ...] #TODO: List[cluster_id]にする方が紛らわしくなくで良いかも．
+        self.history = {'time': [], 'energy': [], 'delay': [], 'pdr': [], # 評価指標記録用
+                        'trust': {i:[] for i in range(self.config.NUM_DRONES)},
+                        'cluster_id': {i:[] for i in range(self.config.NUM_DRONES)},
+                        'reports_received': {i:[] for i in range(self.config.NUM_DRONES)},
+                        'reports_sent': {i:[] for i in range(self.config.NUM_DRONES)}}
         self.visualizer = LiveVisualizer(config.AREA_SIZE, self.drones)
 
     def reset(self):
@@ -74,14 +77,14 @@ class TdlsFanetSimulation:
         if not uav_x.neighbors:
             return {}
     
-        for uav_j_id in self.clusters.get(uav_x.cluster_id, []): #クラスタ内の全ノードに対して．被評価ノード:uav_j
-            if uav_j_id == uav_x.id:
+        for uav_j in self.clusters.get(uav_x.cluster_id, []): #クラスタ内の全ノードに対して．被評価ノード:uav_j
+            if uav_j.id == uav_x.id:
                 continue
             recommendations = [] 
             for neighbor_k_id in uav_x.neighbors: # 隣接ノード k が評価対象 uav_j の信頼値をノードiにリコメンドする 
                 payload = uav_x.packet_payload_history.get(neighbor_k_id)
-                if payload and uav_j_id in payload.direct_trust_to_neighbors:
-                    rec = payload.direct_trust_to_neighbors[uav_j_id]
+                if payload and uav_j.id in payload.direct_trust_to_neighbors:
+                    rec = payload.direct_trust_to_neighbors[uav_j.id]
                 else:
                     rec = (self.config.INITIAL_TRUST, self.config.init_sigma)
                 recommendations.append(rec)
@@ -90,7 +93,7 @@ class TdlsFanetSimulation:
                 avg_rec_mu, avg_rec_star = self.config.INITIAL_TRUST, self.config.init_sigma
             else:
                 avg_rec_mu, avg_rec_star = combine_gaussians([r[0] for r in recommendations], [r[1] for r in recommendations])
-            uav_x.indirect_trust_to_others[uav_j_id] = (avg_rec_mu, avg_rec_star)
+            uav_x.indirect_trust_to_others[uav_j.id] = (avg_rec_mu, avg_rec_star)
         return uav_x.indirect_trust_to_others
     
     
@@ -209,10 +212,38 @@ class TdlsFanetSimulation:
             
             leader = leader_scores[0][1]
             leader.is_leader = True
+            leader.has_been_leader = True # リーダー経験フラグを立てる
             
             if len(leader_scores) > 1:
                 sub_leader = leader_scores[1][1]
                 sub_leader.is_sub_leader = True
+                
+                
+    async def _simulate_cluster_reporting(self, t: int):
+        """クラスタメンバーがリーダーにレポートを送信する処理"""
+        tasks = []
+        for cid, members in self.clusters.items():
+            leader = next((m for m in members if m.is_leader), None)
+            if not leader:
+                continue
+
+            for member in members:
+                if member.id == leader.id:
+                    continue
+                
+                # メンバーからリーダーへのレポートペイロードを作成
+                report_payload = ClusterReportPayload(
+                    member_id=member.id
+                )
+                member.report_packets_sent += 1
+                leader.reports_addressed_to_me += 1
+                
+                task = asyncio.create_task(member.send_packet(leader, report_payload, sim_time=t))
+                tasks.append(task)
+        
+        if tasks:
+            await asyncio.gather(*tasks)
+            print(f"Time {t}s: Cluster members reported to their leaders.")
 
     async def _simulate_communication(self, t: int) -> Tuple[float, float]:
         """パケット送受信をシミュレートし、PDRと平均遅延を返す"""
@@ -300,7 +331,9 @@ class TdlsFanetSimulation:
                 self.form_clusters()
                 self.select_leaders()
                 print(f"Time {t}s: Clusters and leaders have been updated.")
-            
+                # リーダー選出後に、メンバーからリーダーへの報告処理を実行
+                await self._simulate_cluster_reporting(t)
+                
             # 3. 通信をシミュレートし、結果を取得
             pdr, avg_delay = await self._simulate_communication(t)
             
@@ -312,7 +345,9 @@ class TdlsFanetSimulation:
             self.history['delay'].append(avg_delay)
             for drone in self.drones:
                 self.history['cluster_id'][drone.id].append(drone.cluster_id)
-            
+                self.history['reports_received'][drone.id].append(drone.report_packets_received)
+                self.history['reports_sent'][drone.id].append(drone.report_packets_sent)
+                
             # 5. 可視化とログ表示
             self.visualizer.update(self.drones, sim_time=t)
             leader_map = {cid: next((m.id for m in mems if m.is_leader), None) for cid, mems in self.clusters.items()}
@@ -349,6 +384,35 @@ class TdlsFanetSimulation:
             print(f"{filename} の保存が完了しました。")
         except IOError as e:
             print(f"ファイルの書き込み中にエラーが発生しました: {e}")
+
+    def save_report_history_to_csv(self, filename="report_history.csv"):
+        """リーダー経験のあるUAVの最終的なレポート受信率をCSVに保存する"""
+        print(f"最終レポート受信率を {filename} に保存しています...")
+        try:
+            with open(filename, 'w', newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                # ヘッダー行を作成
+                header = ['uav_id', 'final_report_reception_rate', 'received/attempted']
+                writer.writerow(header)
+                
+                # リーダー経験のあるUAVのみを対象
+                for uav in self.drones:
+                    if uav.has_been_leader:
+                        received = uav.report_packets_received
+                        addressed = uav.reports_addressed_to_me
+                        
+                        if addressed > 0:
+                            rate = received / addressed
+                        else:
+                            rate = 0.0
+                        
+                        row = [uav.id, f"{rate:.3f}", f'{received}/{addressed}']
+                        writer.writerow(row)
+
+            print(f"{filename} の保存が完了しました。")
+        except IOError as e:
+            print(f"Error writing to {filename}: {e}")
 
 
     def plot_results(self):
@@ -473,3 +537,48 @@ class TdlsFanetSimulation:
 
         # レイアウトを調整してテキストが重ならないようにする
         plt.tight_layout(rect=[0, 0, 0.75, 1])
+    
+    def plot_trust_by_type(self):
+        """UAVのタイプ（good/bad）別に平均信頼値をプロットする"""
+        plt.figure(figsize=(12, 6))
+
+        good_nodes = [d.id for d in self.drones if d.type == 'good']
+        bad_nodes = [d.id for d in self.drones if d.type == 'bad']
+
+        if not self.history['time']:
+            print("プロットする履歴データがありません。")
+            return
+
+        # データの長さを揃える
+        num_steps = len(self.history['time'])
+        
+        # goodノードの平均信頼値
+        if good_nodes:
+            good_trust_data = []
+            for i in good_nodes:
+                # 履歴の長さが足りない場合は無視
+                if len(self.history['trust'][i]) == num_steps:
+                    good_trust_data.append(self.history['trust'][i])
+            
+            if good_trust_data:
+                avg_good_trust = np.mean(np.array(good_trust_data), axis=0)
+                plt.plot(self.history['time'], avg_good_trust, label=f'Average Trust of Good Nodes (n={len(good_trust_data)})', color='green')
+
+        # badノードの平均信頼値
+        if bad_nodes:
+            bad_trust_data = []
+            for i in bad_nodes:
+                if len(self.history['trust'][i]) == num_steps:
+                    bad_trust_data.append(self.history['trust'][i])
+
+            if bad_trust_data:
+                avg_bad_trust = np.mean(np.array(bad_trust_data), axis=0)
+                plt.plot(self.history['time'], avg_bad_trust, label=f'Average Trust of Bad Nodes (n={len(bad_trust_data)})', color='red')
+
+        plt.title('Average Trust Score by Node Type')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Trust Score')
+        plt.ylim(0, 1.1)
+        plt.legend()
+        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+        plt.tight_layout()

@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 
 from global_var import SimConfig
-from packet import Packet, TelemetryPayload
+from packet import Packet, TelemetryPayload, ClusterReportPayload
 
 # --- UAV (ドローン) クラス ---
 class UAV:
@@ -29,20 +29,24 @@ class UAV:
         self.energy = self.initial_energy
         self.trust_score = self.config.INITIAL_TRUST
         
-        self.neighbors:list[UAV] = []
+        self.neighbors = []
         self.direct_trust_to_neighbors = {}
         self.indirect_trust_to_others = {}
         self.hybrid_trust_to_others = {}
         self.cluster_id = None
         self.is_leader = False
         self.is_sub_leader = False
-        self.type = 'good' # or random.choice(['good', 'neutral', 'bad'])
+        self.has_been_leader = False # リーダー経験フラグ
+        self.type = random.choices(['good', 'bad'], weights=[0.4, 0.6], k=1)[0]
         
         self.inbox = asyncio.Queue()
         
         self.history_out: Dict[int, Dict[str, Any]] = {} #送信履歴 {相手ID: {'sent': int, 'success': int, 'delays': list}}
         self.history_in: Dict[int, Dict[str, int]] = {} #受信履歴 {相手ID: {'received': int}}
         self.packet_payload_history: Dict[int, TelemetryPayload] = {} # 受信したペイロード履歴 {送信者ID: Payload}
+        self.report_packets_received = 0 # リーダーとして受信したレポート数
+        self.report_packets_sent = 0 # メンバーとして送信したレポート数
+        self.reports_addressed_to_me = 0 # リーダーとして自身に送られるはずだったレポート総数
 
     async def send_packet(self, destination_uav: 'UAV', payload: TelemetryPayload, sim_time: float) -> tuple[bool, float]:
         packet = Packet(self.id, destination_uav.id, payload, sim_time)
@@ -74,10 +78,15 @@ class UAV:
                     self.history_in[source_id] = {'received': 0}
                 self.history_in[source_id]['received'] += 1
                 
-                self.packet_payload_history[source_id] = packet.payload
-                
-                print(f"📦 Packet received by {self.id} from {packet.source_id}, data: '{packet.payload}'")
-                # TODO:ここで受信したデータに応じた処理を行う (例: 信頼度更新のトリガーなど)
+                if isinstance(packet.payload, TelemetryPayload):
+                    self.packet_payload_history[source_id] = packet.payload
+                    print(f"📦 Telemetry received by {self.id} from {packet.source_id}")
+                elif isinstance(packet.payload, ClusterReportPayload):
+                    # リーダーがメンバーからのレポートを受信した際の処理
+                    self.report_packets_received += 1
+                    print(f"📈 Report received by Leader {self.id} from member {packet.source_id}(Total reports: {self.report_packets_received})")
+                    
+                #TODO:ここで受信したデータに応じた処理を行う (例: 信頼度更新のトリガーなど)
                 self.inbox.task_done()
                 
             except asyncio.CancelledError:
@@ -93,11 +102,11 @@ class UAV:
         UAVのタイプに基づき、パケット受信(中継)の成否を返す
         """
         if self.type == 'good':
-            return random.random() < 0.95  # 正常ノードは100%成功
+            return random.random() < 0.95  # 正常ノードは95%成功
         elif self.type == 'neutral':
-            return random.random() < 0.7 # 80%の確率で成功(True)
+            return random.random() < 0.7 # 70%の確率で成功(True)
         elif self.type == 'bad':
-            return random.random() < 0.2 # 50%の確率で破棄(False)
+            return random.random() < 1.0e-6 # 20%の確率で破棄(False)
     
     def _get_random_velocity(self, v_range):
         speed = random.uniform(v_range[0], v_range[1])
@@ -155,5 +164,5 @@ class UAV:
         elif t == 'neutral':
             return random.uniform(0.05, 0.1)
         else:  # 'bad'
-            return random.uniform(0.1, 0.5)
+            return random.uniform(0.5, 1.0)
         
