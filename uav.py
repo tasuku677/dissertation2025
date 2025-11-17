@@ -28,6 +28,12 @@ class UAV:
         self.destination = np.random.rand(3) * self.config.AREA_SIZE
         self.energy = self.initial_energy
         self.trust_score = self.config.INITIAL_TRUST
+        self.type = random.choices(['good', 'bad'], weights=[0.8, 0.2], k=1)[0]
+        
+        if self.type == 'good':
+            self.transmittion_rate = random.uniform(20, 25)  # Good nodes: 20-25 Mbps
+        else:  # 'bad'
+            self.transmittion_rate = random.uniform(4, 6)   # Bad nodes: 54-6 Mbps
         
         self.neighbors = []
         self.direct_trust_to_neighbors = {}
@@ -37,7 +43,7 @@ class UAV:
         self.is_leader = False
         self.is_sub_leader = False
         self.has_been_leader = False # リーダー経験フラグ
-        self.type = random.choices(['good', 'bad'], weights=[0.4, 0.6], k=1)[0]
+        
         
         self.inbox = asyncio.Queue()
         
@@ -52,7 +58,8 @@ class UAV:
         packet = Packet(self.id, destination_uav.id, payload, sim_time)
         dist = np.linalg.norm(self.pos - destination_uav.pos) 
         self.consume_energy_tx(SimConfig.PACKET_SIZE, dist)
-        transmission_delay = dist / SimConfig.C + self._sample_delay(self.type) #TODO: データサイズの影響を考慮 #TODO# 相手が 'bad' なら遅延が増加するようにしても良い
+        transmission_delay = SimConfig.PACKET_SIZE / (self.transmittion_rate * 1e6) * 1e3  # milliseconds
+        print('transmission delay', transmission_delay)
         await asyncio.sleep(transmission_delay)
         
         # ★ 変更: 成功確率は相手(受信側)のタイプに基づく
@@ -106,7 +113,7 @@ class UAV:
         elif self.type == 'neutral':
             return random.random() < 0.7 # 70%の確率で成功(True)
         elif self.type == 'bad':
-            return random.random() < 1.0e-6 # 20%の確率で破棄(False)
+            return random.random() < 0.2 # 20%の確率で破棄(False)
     
     def _get_random_velocity(self, v_range):
         speed = random.uniform(v_range[0], v_range[1])

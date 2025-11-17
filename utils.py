@@ -27,7 +27,7 @@ def normalize_components(uav_x:UAV):
         if info_of_uav_j is None:
             continue
         dist = np.linalg.norm(uav_x.pos - info_of_uav_j.pos)
-        ss_raw[uav_j_id] = _calculate_signal_strength(dist) / 3.24
+        ss_raw[uav_j_id] = min(_calculate_signal_strength(dist) * 1e7 / 3.24 , 1.0)
         energy_raw[uav_j_id] = min(info_of_uav_j.energy / SimConfig.INITIAL_ENERGY, 1.0)
         
         history = uav_x.history_out.get(uav_j_id)
@@ -35,7 +35,7 @@ def normalize_components(uav_x:UAV):
             pdr_raw[uav_j_id] = history['success'] / history['sent']
             # 平均遅延 (Delay)
             if history['delays']:
-                delay_raw[uav_j_id] = (1.45 - np.sum(history['delays']))/1.54
+                delay_raw[uav_j_id] = (2.45 - np.mean(history['delays']))/1.54
             else:
                 delay_raw[uav_j_id] = 0.0 # 成功パケットなし = 遅延評価0 (最低評価)
         else:
