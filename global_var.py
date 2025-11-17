@@ -11,7 +11,7 @@ class SimConfig:
     INITIAL_TRUST = 0.5
     INITIAL_ENERGY = 26.25 * 3600  # Whをジュールに変換 (仮)
     ENERGY_TX = 0.00000046 * 1e-9 # nJ/bitをJ/bitに変換
-    PACKET_SIZE = 4500  # bits
+    PACKET_SIZE = 1024 * 8  # bits
     
     # 信頼度計算の係数 (論文より)
     A_COEFFICIENT = 0.3 # 0.2から0.45の間の値

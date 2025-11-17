@@ -33,13 +33,13 @@ class TdlsFanetSimulation:
         self.history = {'time': [], 'energy': [], 'delay': [], 'pdr': [], 'trust': {i:[] for i in range(self.config.NUM_DRONES)}}
         # LiveVisualizerはリセットせずに再利用する
 
-    # Algorithm 2: 直接信頼度の計算 #TODO: 各ノードが保持する隣接ノード情報を活用するように変更
+    # Algorithm 2: 直接信頼度の計算 
     def update_direct_trust(self, uav_x): #uav_x から見た隣接ノード郡 uav_j の直接信頼値を求める．
         """
         引数：評価者 uav_x,
         返り値：辞書 uav_x の隣接ノード郡 uav_id: trust_value,
         """
-        metrics = normalize_components(uav_x)  # {neighbor_id: {'ss','pdr','energy','delay'}} ->  TODO:{neighbor_id: {'time', 'ss','pdr','energy','delay'}}更新時の時間を追跡．この時間が古いと分散も大きくする
+        metrics = normalize_components(uav_x)  # {neighbor_id: {'ss','pdr','energy','delay'}, {}, {}...} ->  TODO:{neighbor_id: {'time', 'ss','pdr','energy','delay'}, {}, {}...}更新時の時間を追跡．この時間が古いと分散も大きくする
         if not metrics:
             return uav_x.direct_trust_to_neighbors
         for uav_j_id in uav_x.neighbors:
@@ -57,13 +57,14 @@ class TdlsFanetSimulation:
             else:
                 direct_trust_mu = 0.5 * (0.5 ** total_weight)
             
-            n_obs = uav_x.history_out.get(uav_j_id, {}).get('sent', 0)
+            # n_obs = uav_x.history_out.get(uav_j_id, {}).get('sent', 0)
+            n_obs = uav_x.history_in.get(uav_j_id, {}).get('received', 0)
+            decay_factor = 0.05
+            variance = SimConfig.init_sigma * math.exp(-decay_factor * n_obs)
             if n_obs == 0:
                 direct_trust_sigma_sq = SimConfig.init_sigma
             else:
-                p = direct_trust_mu
-                beta_var = (p * (1 - p)) / (n_obs + 2)
-                direct_trust_sigma_sq = max(beta_var, 1e-6)
+                direct_trust_sigma_sq = max(1/(n_obs ** 2), 1e-6)
                 
             uav_x.direct_trust_to_neighbors[uav_j_id] = (direct_trust_mu, direct_trust_sigma_sq) # 信頼値と分散をセット
         return uav_x.direct_trust_to_neighbors
@@ -253,7 +254,6 @@ class TdlsFanetSimulation:
         # 各UAVが隣接ノードにパケットを送信するタスクを作成
         for sender in self.drones:
             # 送信するペイロードを生成
-            # TODO: neighborsやdirect_trustsはディープコピーが望ましい
             payload = TelemetryPayload(
                 energy=sender.energy,
                 trust=sender.trust_score,
@@ -273,7 +273,6 @@ class TdlsFanetSimulation:
 
         successful_packets = 0
         total_delay = 0
-
         # 全ての送信タスクの完了を待つ
         for task, sender, receiver_id in tasks_with_context:
             try:
@@ -321,12 +320,15 @@ class TdlsFanetSimulation:
         self.packet_handlers = [asyncio.create_task(drone.packet_handler()) for drone in self.drones]
         
         for t in range(0, self.config.SIM_DURATION, self.config.TIME_STEP):
-            # 1. 全UAVのタスク（移動、近隣更新、信頼度計算）を並行実行
+            # 1. 通信をシミュレートし、結果を取得
+            pdr, avg_delay = await self._simulate_communication(t)
+            
+            # 2. 全UAVのタスク（移動、近隣更新、信頼度計算）を並行実行
             uav_tasks = [self.run_uav_task(drone) for drone in self.drones]
             await asyncio.gather(*uav_tasks)
             print(f"Time {t}s: Drones moved and updated their states.")
 
-            # 2. クラスタ形成とリーダー選出 (10秒ごと)
+            # 3. クラスタ形成とリーダー選出 (10秒ごと)
             if t % 10 == 0:
                 self.form_clusters()
                 self.select_leaders()
@@ -334,8 +336,6 @@ class TdlsFanetSimulation:
                 # リーダー選出後に、メンバーからリーダーへの報告処理を実行
                 await self._simulate_cluster_reporting(t)
                 
-            # 3. 通信をシミュレートし、結果を取得
-            pdr, avg_delay = await self._simulate_communication(t)
             
             # 4. 評価指標を記録
             total_energy = sum(d.energy for d in self.drones)
