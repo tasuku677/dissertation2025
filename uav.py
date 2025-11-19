@@ -26,14 +26,15 @@ class UAV:
         self.pos = self.initial_pos.copy()
         self.velocity = self.initial_velocity.copy()
         self.destination = np.random.rand(3) * self.config.AREA_SIZE
-        self.energy = self.initial_energy
         self.trust_score = self.config.INITIAL_TRUST
         self.type = random.choices(['good', 'bad'], weights=[0.8, 0.2], k=1)[0]
         
         if self.type == 'good':
-            self.transmittion_rate = random.uniform(20, 25)  # Good nodes: 20-25 Mbps
+            self.transmittion_rate = random.uniform(8, 11)  # Good nodes: 20-25 Mbps
+            self.energy = self.initial_energy
         else:  # 'bad'
             self.transmittion_rate = random.uniform(4, 6)   # Bad nodes: 54-6 Mbps
+            self.energy = self.initial_energy * random.uniform(0.45, 0.5)  # Bad nodes may start with less energy
         
         self.neighbors = []
         self.direct_trust_to_neighbors = {}
@@ -59,7 +60,6 @@ class UAV:
         dist = np.linalg.norm(self.pos - destination_uav.pos) 
         self.consume_energy_tx(SimConfig.PACKET_SIZE, dist)
         transmission_delay = SimConfig.PACKET_SIZE / (self.transmittion_rate * 1e6) * 1e3  # milliseconds
-        print('transmission delay', transmission_delay)
         await asyncio.sleep(transmission_delay)
         
         # ★ 変更: 成功確率は相手(受信側)のタイプに基づく
@@ -87,11 +87,11 @@ class UAV:
                 
                 if isinstance(packet.payload, TelemetryPayload):
                     self.packet_payload_history[source_id] = packet.payload
-                    print(f"📦 Telemetry received by {self.id} from {packet.source_id}")
+                    # print(f"📦 Telemetry received by {self.id} from {packet.source_id}")
                 elif isinstance(packet.payload, ClusterReportPayload):
                     # リーダーがメンバーからのレポートを受信した際の処理
                     self.report_packets_received += 1
-                    print(f"📈 Report received by Leader {self.id} from member {packet.source_id}(Total reports: {self.report_packets_received})")
+                    # print(f"📈 Report received by Leader {self.id} from member {packet.source_id}(Total reports: {self.report_packets_received})")
                     
                 #TODO:ここで受信したデータに応じた処理を行う (例: 信頼度更新のトリガーなど)
                 self.inbox.task_done()
@@ -136,7 +136,7 @@ class UAV:
         
         self.pos += self.velocity * time_step
         # 移動によるエネルギー消費（仮）
-        self.energy -= 0.1 * np.linalg.norm(self.velocity) 
+        self.energy -= 1 * np.linalg.norm(self.velocity) 
         
         await asyncio.sleep(time_step)
 
@@ -160,7 +160,7 @@ class UAV:
         E_amp = getattr(self.config, 'E_AMP', getattr(SimConfig, 'E_AMP'))
 
         # 距離が None や負の場合は 0 とみなす
-        d = max(0.0, distance if distance is not None else 0.0)
+        d = distance if distance is not None else 0.0
         energy_consumed = packet_size_bits * (E_elec + E_amp * (d ** 2))
         self.energy -= energy_consumed
      

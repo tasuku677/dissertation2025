@@ -7,6 +7,8 @@ from global_var import SimConfig
 from uav import UAV 
 from global_var import SimConfig
 
+import csv
+
 def _calculate_signal_strength(distance:float): 
     fspl =  20 * math.log10((4 * math.pi * distance * SimConfig.F) / SimConfig.C)
     ss = (20 - fspl)  # dbm 
@@ -67,6 +69,21 @@ def normalize_components(uav_x:UAV):
             'energy': energy_norm[nid],
             'delay': delay_norm[nid],
         }
+    
+    # CSVに保存する処理
+    with open('metrics_by_neighbor.csv', 'a', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        # ヘッダー行を作成
+        writer.writerow(['uav_id', 'ss_raw', 'pdr_raw', 'energy_raw', 'delay_raw'])
+        # 各UAVのデータを書き込む
+        for uav_id in ss_raw.keys():
+            writer.writerow([
+                uav_id,
+                ss_raw.get(uav_id, 0),
+                pdr_raw.get(uav_id, 0),
+                energy_raw.get(uav_id, 0),
+                delay_raw.get(uav_id, 0)
+            ])
     return metrics_by_neighbor
 
 def combine_gaussians(means, variances):
