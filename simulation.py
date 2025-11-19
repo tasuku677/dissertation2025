@@ -30,7 +30,13 @@ class TdlsFanetSimulation:
         for drone in self.drones:
             drone.reset()
         self.clusters = {}
-        self.history = {'time': [], 'energy': [], 'delay': [], 'pdr': [], 'trust': {i:[] for i in range(self.config.NUM_DRONES)}}
+        self.history = {
+        'time': [], 'energy': [], 'delay': [], 'pdr': [],
+        'trust': {i:[] for i in range(self.config.NUM_DRONES)},
+        'cluster_id': {i:[] for i in range(self.config.NUM_DRONES)},      # 追加
+        'reports_received': {i:[] for i in range(self.config.NUM_DRONES)}, # 追加
+        'reports_sent': {i:[] for i in range(self.config.NUM_DRONES)}      # 追加
+        }
         # LiveVisualizerはリセットせずに再利用する
 
     # Algorithm 2: 直接信頼度の計算 
@@ -64,7 +70,7 @@ class TdlsFanetSimulation:
             if n_obs == 0:
                 direct_trust_sigma_sq = SimConfig.init_sigma
             else:
-                direct_trust_sigma_sq = max(1/(n_obs ** 2), 1e-6)
+                direct_trust_sigma_sq = max(1/(n_obs), 1e-6)
                 
             uav_x.direct_trust_to_neighbors[uav_j_id] = (direct_trust_mu, direct_trust_sigma_sq) # 信頼値と分散をセット
         return uav_x.direct_trust_to_neighbors
@@ -105,6 +111,8 @@ class TdlsFanetSimulation:
         if not uav.neighbors:
             return 0.0
         d_sum = [np.linalg.norm(uav.pos - n.pos) for n in self.drones if uav.id != n.id]
+        bs_distance = np.linalg.norm(uav.pos - self.config.BS_POS)
+        d_sum.append(bs_distance)
         d_avg = np.mean(d_sum) ### 全ドローンとの平均距離
         d_max = np.max(d_sum) if d_sum else 1.0
         r_e = uav.energy / self.config.INITIAL_ENERGY # 残存エネルギー率 (正規化)
@@ -244,7 +252,7 @@ class TdlsFanetSimulation:
         
         if tasks:
             await asyncio.gather(*tasks)
-            print(f"Time {t}s: Cluster members reported to their leaders.")
+            # print(f"Time {t}s: Cluster members reported to their leaders.")
 
     async def _simulate_communication(self, t: int) -> Tuple[float, float]:
         """パケット送受信をシミュレートし、PDRと平均遅延を返す"""
@@ -293,7 +301,7 @@ class TdlsFanetSimulation:
                     total_delay += delay
 
             except Exception as e:
-                print(f"Error in communication task from {sender.id} to {receiver_id}: {e}")
+                # print(f"Error in communication task from {sender.id} to {receiver_id}: {e}")
                 # タスク失敗時も 'sent' としてカウント
                 if receiver_id not in sender.history_out:
                     sender.history_out[receiver_id] = {'sent': 0, 'success': 0, 'delays': []}
@@ -326,7 +334,7 @@ class TdlsFanetSimulation:
             # 2. 全UAVのタスク（移動、近隣更新、信頼度計算）を並行実行
             uav_tasks = [self.run_uav_task(drone) for drone in self.drones]
             await asyncio.gather(*uav_tasks)
-            print(f"Time {t}s: Drones moved and updated their states.")
+            # print(f"Time {t}s: Drones moved and updated their states.")
 
             # 3. クラスタ形成とリーダー選出 (10秒ごと)
             if t % 10 == 0:
@@ -351,7 +359,8 @@ class TdlsFanetSimulation:
             # 5. 可視化とログ表示
             self.visualizer.update(self.drones, sim_time=t)
             leader_map = {cid: next((m.id for m in mems if m.is_leader), None) for cid, mems in self.clusters.items()}
-            print(f"Time: {t}s, PDR: {pdr:.2f}, Avg Delay: {avg_delay*1000:.2f}ms, Leaders: {leader_map}")
+            if t % 10 == 0:
+                print(f"Time: {t}s, PDR: {pdr:.2f}, Avg Delay: {avg_delay*1000:.2f}ms, Leaders: {leader_map}, Leaders' types: {[self.drones[leader_map[cid]].type if leader_map[cid] is not None else 'N/A' for cid in leader_map]}")
 
         # シミュレーション終了時にパケットハンドラーを安全に停止
         for task in self.packet_handlers:

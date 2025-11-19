@@ -4,6 +4,7 @@ class SimConfig:
     
     NUM_DRONES = 50
     AREA_SIZE = (800, 600, 400)  # X, Y, Z (m)
+    BS_POS = [400, 300, 0]  # 地上局の位置 (m)
     SIM_DURATION = 40  # seconds
     TIME_STEP = 1  # 1秒ごとにシミュレーションを更新
     VELOCITY_RANGE = (8.9, 31.3)  # 20-70 mphをm/sに変換
@@ -20,7 +21,7 @@ class SimConfig:
     B_COEFFICIENT_FITNESS = 0.5 # a*F_i + b*HT_i の 'a'
     B_COEFFICIENT_HYBRID = 0.5 # a*F_i + b*HT_i の 'b'
     
-    init_sigma = 9  # 初期分散の仮定値
+    init_sigma = 2  # 初期分散の仮定値
     d_sigma = 2  # 分散の仮定値
     
     E_ELEC = 50e-9      # J/bit (50 nJ/bit), W_e
