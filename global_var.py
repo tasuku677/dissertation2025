@@ -5,7 +5,7 @@ class SimConfig:
     NUM_DRONES = 50
     AREA_SIZE = (800, 600, 400)  # X, Y, Z (m)
     BS_POS = [400, 300, 0]  # 地上局の位置 (m)
-    SIM_DURATION = 40  # seconds
+    SIM_DURATION = 100  # seconds
     TIME_STEP = 1  # 1秒ごとにシミュレーションを更新
     VELOCITY_RANGE = (8.9, 31.3)  # 20-70 mphをm/sに変換
     COMM_RANGE = 250  # 通信範囲 (m) - 仮定 論文では50-300m 
@@ -26,3 +26,6 @@ class SimConfig:
     
     E_ELEC = 50e-9      # J/bit (50 nJ/bit), W_e
     E_AMP = 100e-12     # J/bit/m^2 (100 pJ/bit/m^2),  W_a
+    
+    # ノードタイプの割合
+    NODE_TYPE_WEIGHTS = {'good': 0.4, 'neutral': 0.3, 'bad': 0.3}  # good, neutral, bad の割合

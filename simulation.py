@@ -33,9 +33,8 @@ class TdlsFanetSimulation:
         self.history = {
         'time': [], 'energy': [], 'delay': [], 'pdr': [],
         'trust': {i:[] for i in range(self.config.NUM_DRONES)},
-        'cluster_id': {i:[] for i in range(self.config.NUM_DRONES)},      # 追加
-        'reports_received': {i:[] for i in range(self.config.NUM_DRONES)}, # 追加
-        'reports_sent': {i:[] for i in range(self.config.NUM_DRONES)}      # 追加
+        'cluster_id': {i:[] for i in range(self.config.NUM_DRONES)},     
+        'reports_received': {i:[] for i in range(self.config.NUM_DRONES)},         'reports_sent': {i:[] for i in range(self.config.NUM_DRONES)}      
         }
         # LiveVisualizerはリセットせずに再利用する
 
@@ -65,8 +64,8 @@ class TdlsFanetSimulation:
             
             # n_obs = uav_x.history_out.get(uav_j_id, {}).get('sent', 0)
             n_obs = uav_x.history_in.get(uav_j_id, {}).get('received', 0)
-            decay_factor = 0.05
-            variance = SimConfig.init_sigma * math.exp(-decay_factor * n_obs)
+            # decay_factor = 0.05
+            # variance = SimConfig.init_sigma * math.exp(-decay_factor * n_obs)
             if n_obs == 0:
                 direct_trust_sigma_sq = SimConfig.init_sigma
             else:
@@ -484,6 +483,33 @@ class TdlsFanetSimulation:
                 else:
                     row.append(None)  # データがない場合は空欄
             rows.append(row)
+        
+        # 最後の行に good ノードと bad ノードの平均を追加
+        good_nodes = [d.id for d in self.drones if d.type == 'good']
+        bad_nodes = [d.id for d in self.drones if d.type == 'bad']
+        neutral_nodes = [d.id for d in self.drones if d.type == 'neutral']
+
+        if good_nodes:
+            avg_good_trust = np.mean([self.history['trust'][i][-1] for i in good_nodes if self.history['trust'][i]])
+        else:
+            avg_good_trust = 0.0
+
+        if bad_nodes:
+            avg_bad_trust = np.mean([self.history['trust'][i][-1] for i in bad_nodes if self.history['trust'][i]])
+        else:
+            avg_bad_trust = 0.0
+            
+        if neutral_nodes:
+            avg_neutral_trust = np.mean([self.history['trust'][i][-1] for i in neutral_nodes if self.history['trust'][i]])
+        else:
+            avg_neutral_trust = 0.0
+
+        # 平均値を記述する行を作成
+        avg_row = ['average'] + ["" for _ in range(self.config.NUM_DRONES)]
+        avg_row.append(f"Good Nodes Avg: {avg_good_trust:.4f}")
+        avg_row.append(f"Bad Nodes Avg: {avg_bad_trust:.4f}")
+        avg_row.append(f"Neutral Nodes Avg: {avg_neutral_trust:.4f}")
+        rows.append(avg_row)
 
         try:
             with open(filename, 'w', newline='', encoding='utf-8') as f:
@@ -525,11 +551,12 @@ class TdlsFanetSimulation:
         plt.plot(self.history['time'], min_trust, label='Minimum Trust', color='red', linestyle='--')
         
         # グラフの体裁
-        plt.title('Aggregated Trust of All Nodes over Time')
-        plt.xlabel('Time (s)')
-        plt.ylabel('Trust Value')
+        plt.title('Aggregated Trust of All Nodes over Time', fontsize=16)  # タイトルの文字サイズ
+        plt.xlabel('Time (s)', fontsize=20)  # 横軸ラベルの文字サイズ
+        plt.ylabel('Trust Value', fontsize=20)  # 縦軸ラベルの文字サイズ
         plt.ylim(0, 1.1)
-        plt.legend(loc='lower left')
+        plt.ylim(0, 1.1)
+        plt.legend(loc='lower left', fontsize=12)
         plt.grid(True, which='both', linestyle='--', linewidth=0.5)
         
         # global_varの値をテキストとして整形
@@ -553,6 +580,7 @@ class TdlsFanetSimulation:
 
         good_nodes = [d.id for d in self.drones if d.type == 'good']
         bad_nodes = [d.id for d in self.drones if d.type == 'bad']
+        neutral_nodes = [d.id for d in self.drones if d.type == 'neutral']
 
         if not self.history['time']:
             print("プロットする履歴データがありません。")
@@ -584,10 +612,24 @@ class TdlsFanetSimulation:
                 avg_bad_trust = np.mean(np.array(bad_trust_data), axis=0)
                 plt.plot(self.history['time'], avg_bad_trust, label=f'Average Trust of Bad Nodes (n={len(bad_trust_data)})', color='red')
 
-        plt.title('Average Trust Score by Node Type')
-        plt.xlabel('Time (s)')
-        plt.ylabel('Trust Score')
+        # neutralノードの平均信頼値
+        if neutral_nodes:
+            neutral_trust_data = []
+            for i in neutral_nodes:
+                if len(self.history['trust'][i]) == num_steps:
+                    neutral_trust_data.append(self.history['trust'][i])
+
+            if neutral_trust_data:
+                avg_neutral_trust = np.mean(np.array(neutral_trust_data), axis=0)
+                plt.plot(self.history['time'], avg_neutral_trust, label=f'Average Trust of Neutral Nodes (n={len(neutral_trust_data)})', color='blue')
+
+        plt.title('Average Trust Score by Node Type', fontsize=20)
+        plt.xlabel('Time (s)', fontsize=20)
+        plt.ylabel('Trust Score', fontsize=20)
         plt.ylim(0, 1.1)
-        plt.legend()
+        plt.legend(fontsize=20)
+        # 軸の数値（目盛り）の文字サイズを変更
+        plt.tick_params(axis='both', which='major', labelsize=18)  # 主目盛りの文字サイズ
+        
         plt.grid(True, which='both', linestyle='--', linewidth=0.5)
         plt.tight_layout()
