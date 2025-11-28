@@ -49,29 +49,20 @@ class TdlsFanetSimulation:
             return uav_x.direct_trust_to_neighbors
         for uav_j_id in uav_x.neighbors:
             if uav_j_id not in uav_x.direct_trust_to_neighbors:
-                uav_x.direct_trust_to_neighbors[uav_j_id] = (0.5, SimConfig.init_sigma) # 初期値
+                uav_x.direct_trust_to_neighbors[uav_j_id] = self.config.INITIAL_TRUST
                 continue
             m = metrics.get(uav_j_id, None)
             if m is None:
                 continue
             total_weight = 0.25 * m['ss'] + 0.25 * m['pdr'] + 0.25 * m['energy'] + 0.25 * m['delay']
             if total_weight >= 0.7:
-                direct_trust_mu = 0.5 * (2 ** total_weight)
+                direct_trust = 0.5 * (2 ** total_weight)
             elif total_weight >= 0.3:
-                direct_trust_mu = 0.5 * (1.5 ** total_weight)
+                direct_trust = 0.5 * (1.5 ** total_weight)
             else:
-                direct_trust_mu = 0.5 * (0.5 ** total_weight)
-            
-            # n_obs = uav_x.history_out.get(uav_j_id, {}).get('sent', 0)
-            n_obs = uav_x.history_in.get(uav_j_id, {}).get('received', 0)
-            # decay_factor = 0.05
-            # variance = SimConfig.init_sigma * math.exp(-decay_factor * n_obs)
-            if n_obs == 0:
-                direct_trust_sigma_sq = SimConfig.init_sigma
-            else:
-                direct_trust_sigma_sq = max(1/(n_obs), 1e-6)
+                direct_trust = 0.5 * (0.5 ** total_weight)
                 
-            uav_x.direct_trust_to_neighbors[uav_j_id] = (direct_trust_mu, direct_trust_sigma_sq) # 信頼値と分散をセット
+            uav_x.direct_trust_to_neighbors[uav_j_id] = direct_trust 
         return uav_x.direct_trust_to_neighbors
 
     # Algorithm 3: 間接信頼度の計算
@@ -92,14 +83,15 @@ class TdlsFanetSimulation:
                 if payload and uav_j.id in payload.direct_trust_to_neighbors:
                     rec = payload.direct_trust_to_neighbors[uav_j.id]
                 else:
-                    rec = (self.config.INITIAL_TRUST, self.config.init_sigma)
+                    rec = self.config.INITIAL_TRUST
                 recommendations.append(rec)
             
-            if not recommendations:
-                avg_rec_mu, avg_rec_star = self.config.INITIAL_TRUST, self.config.init_sigma
+            if recommendations:
+                avg_rec = sum(recommendations) / len(recommendations)
+                indirect_trust = math.sqrt(uav_x.direct_trust_to_neighbors.get(uav_j.id, self.config.INITIAL_TRUST)) * avg_rec
             else:
-                avg_rec_mu, avg_rec_star = combine_gaussians([r[0] for r in recommendations], [r[1] for r in recommendations])
-            uav_x.indirect_trust_to_others[uav_j.id] = (avg_rec_mu, avg_rec_star)
+                indirect_trust = self.config.INITIAL_TRUST
+            uav_x.indirect_trust_to_others[uav_j.id] = indirect_trust
         return uav_x.indirect_trust_to_others
     
     
@@ -136,22 +128,19 @@ class TdlsFanetSimulation:
             if uav_x.id == uav_j.id:
                 continue
             
-            direct_trust = uav_x.direct_trust_to_neighbors.get(uav_j.id, (self.config.INITIAL_TRUST, self.config.init_sigma))
-            indirect_trust = uav_x.indirect_trust_to_others.get(uav_j.id, (self.config.INITIAL_TRUST, self.config.init_sigma))
+            direct_trust = uav_x.direct_trust_to_neighbors.get(uav_j.id, self.config.INITIAL_TRUST)
+            indirect_trust = uav_x.indirect_trust_to_others.get(uav_j.id, self.config.INITIAL_TRUST)
             
             # ハイブリッド信頼を計算
-            hybrid_mu, hybrid_var = combine_gaussians(
-                [direct_trust[0], indirect_trust[0]],
-                [direct_trust[1], indirect_trust[1]]
-            )
-            uav_x.hybrid_trust_to_others[uav_j.id] = (hybrid_mu, hybrid_var)
-            vals.append((hybrid_mu, hybrid_var))
+            hybrid_trust = self.config.L_COEEFFICIENT * direct_trust + self.config.M_COEFFICIENT * indirect_trust
+            uav_x.hybrid_trust_to_others[uav_j.id] = hybrid_trust
+            vals.append(hybrid_trust)
 
         # 2) 各評価者がもつuav_jへの信頼値平均を計算
         if not vals:
             avg_hybrid_by_target = self.config.INITIAL_TRUST
         else:
-            avg_hybrid_by_target = combine_gaussians([v[0] for v in vals], [v[1] for v in vals])[0]
+            avg_hybrid_by_target = sum(vals) / len(vals)
             
         # 3) Fitness と重み付けして最終信頼に反映
         final_trust = (
