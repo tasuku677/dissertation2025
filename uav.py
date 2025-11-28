@@ -27,11 +27,18 @@ class UAV:
         self.velocity = self.initial_velocity.copy()
         self.destination = np.random.rand(3) * self.config.AREA_SIZE
         self.trust_score = self.config.INITIAL_TRUST
-        self.type = random.choices(['good', 'bad'], weights=[0.8, 0.2], k=1)[0]
+        self.type = random.choices(['good', 'neutral', 'bad'], weights=[
+                    self.config.NODE_TYPE_WEIGHTS['good'],
+                    self.config.NODE_TYPE_WEIGHTS['neutral'],
+                    self.config.NODE_TYPE_WEIGHTS['bad']
+                ], k=1)[0]
         
         if self.type == 'good':
             self.transmittion_rate = random.uniform(8, 11)  # Good nodes: 20-25 Mbps
             self.energy = self.initial_energy
+        elif self.type == 'nuetral':
+            self.transmittion_rate = random.uniform(6, 8)  # Good nodes: 20-25 Mbps
+            self.energy = self.initial_energy * random.uniform(0.70, 0.75)  # Neutral nodes may start with slightly less energy
         else:  # 'bad'
             self.transmittion_rate = random.uniform(4, 6)   # Bad nodes: 54-6 Mbps
             self.energy = self.initial_energy * random.uniform(0.45, 0.5)  # Bad nodes may start with less energy
@@ -56,6 +63,7 @@ class UAV:
         self.reports_addressed_to_me = 0 # リーダーとして自身に送られるはずだったレポート総数
 
     async def send_packet(self, destination_uav: 'UAV', payload: TelemetryPayload, sim_time: float) -> tuple[bool, float]:
+        payload.timestamp = sim_time
         packet = Packet(self.id, destination_uav.id, payload, sim_time)
         dist = np.linalg.norm(self.pos - destination_uav.pos) 
         self.consume_energy_tx(SimConfig.PACKET_SIZE, dist)
