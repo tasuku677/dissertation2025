@@ -14,7 +14,7 @@ class UAV:
         self.config = config
         
         # 初期状態を保存
-        self.initial_pos = np.random.rand(3) * config.AREA_SIZE
+        self.initial_pos = np.array(config.AREA_SIZE) / 2.0
         self.initial_velocity = self._get_random_velocity(config.VELOCITY_RANGE)
         self.initial_energy = config.INITIAL_ENERGY
         
