@@ -27,11 +27,14 @@ class UAV:
         self.velocity = self.initial_velocity.copy()
         self.destination = np.random.rand(3) * self.config.AREA_SIZE
         self.trust_score = self.config.INITIAL_TRUST
-        self.type = random.choices(['good', 'neutral', 'bad'], weights=[
-                    self.config.NODE_TYPE_WEIGHTS['good'],
-                    self.config.NODE_TYPE_WEIGHTS['neutral'],
-                    self.config.NODE_TYPE_WEIGHTS['bad']
-                ], k=1)[0]
+        # IDを3で割った余りに基づいてタイプを決定的に割り当てる
+        remainder = self.id % 3
+        if remainder == 0:
+            self.type = 'good'
+        elif remainder == 1:
+            self.type = 'neutral'
+        else: # remainder == 2
+            self.type = 'bad'
         
         if self.type == 'good':
             self.transmittion_rate = random.uniform(8, 11)  # Good nodes: 20-25 Mbps
