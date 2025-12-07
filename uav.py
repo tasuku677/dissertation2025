@@ -60,7 +60,7 @@ class UAV:
         self.inbox = asyncio.Queue()
         
         self.history_out: Dict[int, Dict[str, Any]] = {} #送信履歴 {相手ID: {'sent': int, 'success': int, 'delays': list}}
-        self.history_in: Dict[int, Dict[str, int]] = {} #受信履歴 {相手ID: {'received': int}}
+        self.history_in: Dict[int, Dict[str, Any]] = {} #受信履歴 {相手ID: {'received': int, 'reception_times': list}}
         self.packet_payload_history: Dict[int, TelemetryPayload] = {} # 受信したペイロード履歴 {送信者ID: Payload}
         self.report_packets_received = 0 # リーダーとして受信したレポート数
         self.report_packets_sent = 0 # メンバーとして送信したレポート数
@@ -92,9 +92,11 @@ class UAV:
                 packet: Packet = await self.inbox.get()
                 
                 source_id = packet.source_id
+                # 受信履歴を初期化
                 if source_id not in self.history_in:
-                    self.history_in[source_id] = {'received': 0}
+                    self.history_in[source_id] = {'received': 0, 'reception_times': []}
                 self.history_in[source_id]['received'] += 1
+                self.history_in[source_id]['reception_times'].append(packet.timestamp)
                 
                 if isinstance(packet.payload, TelemetryPayload):
                     self.packet_payload_history[source_id] = packet.payload

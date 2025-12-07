@@ -39,7 +39,7 @@ class TdlsFanetSimulation:
         # LiveVisualizerはリセットせずに再利用する
 
     # Algorithm 2: 直接信頼度の計算 
-    def update_direct_trust(self, uav_x): #uav_x から見た隣接ノード郡 uav_j の直接信頼値を求める．
+    def update_direct_trust(self, uav_x, current_time: int): #uav_x から見た隣接ノード郡 uav_j の直接信頼値を求める．
         """
         引数：評価者 uav_x,
         返り値：辞書 uav_x の隣接ノード郡 uav_id: trust_value,
@@ -63,7 +63,10 @@ class TdlsFanetSimulation:
                 direct_trust_mu = 0.5 * (0.5 ** total_weight)
             
             # n_obs = uav_x.history_out.get(uav_j_id, {}).get('sent', 0)
-            n_obs = uav_x.history_in.get(uav_j_id, {}).get('received', 0)
+            reception_times = uav_x.history_in.get(uav_j_id, {}).get('reception_times', [])
+            window_start_time = max(0, current_time - self.config.P_WINDOW_SIZE)
+            n_obs = sum(0 for t in reception_times if t >= window_start_time)
+
             # decay_factor = 0.05
             # variance = SimConfig.init_sigma * math.exp(-decay_factor * n_obs)
             if n_obs == 0:
@@ -311,15 +314,15 @@ class TdlsFanetSimulation:
         return pdr, avg_delay
 
         
-    async def run_uav_task(self, drone):
+    async def run_uav_task(self, drone, t):
         #TODO: パケット受け取る度に保持データを更新する
         """個々のUAVの1ステップ分のタスク"""
         await drone.move(self.config.TIME_STEP)
-        drone.update_neighbors(self.drones)
-        self.update_direct_trust(drone)
-        self.update_indirect_trust(drone)
-        self.update_final_trust(drone)
-        self.history['trust'][drone.id].append(drone.trust_score)
+        if t >= 0:
+            drone.update_neighbors(self.drones)
+            self.update_direct_trust(drone, t)
+            self.update_final_trust(drone)
+            self.history['trust'][drone.id].append(drone.trust_score)
 
         
     async def run(self):
@@ -331,7 +334,7 @@ class TdlsFanetSimulation:
             pdr, avg_delay = await self._simulate_communication(t)
             
             # 2. 全UAVのタスク（移動、近隣更新、信頼度計算）を並行実行
-            uav_tasks = [self.run_uav_task(drone) for drone in self.drones]
+            uav_tasks = [self.run_uav_task(drone, t) for drone in self.drones]
             await asyncio.gather(*uav_tasks)
             # print(f"Time {t}s: Drones moved and updated their states.")
 
