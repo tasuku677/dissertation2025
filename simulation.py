@@ -65,7 +65,7 @@ class TdlsFanetSimulation:
             # n_obs = uav_x.history_out.get(uav_j_id, {}).get('sent', 0)
             reception_times = uav_x.history_in.get(uav_j_id, {}).get('reception_times', [])
             window_start_time = max(0, current_time - self.config.P_WINDOW_SIZE)
-            n_obs = sum(0 for t in reception_times if t >= window_start_time)
+            n_obs = sum(1 for t in reception_times if t >= window_start_time)
 
             # decay_factor = 0.05
             # variance = SimConfig.init_sigma * math.exp(-decay_factor * n_obs)
