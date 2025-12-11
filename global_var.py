@@ -2,7 +2,7 @@ class SimConfig:
     C = 2.99792458 * 1e8 # 光速 (m/s)
     F = 2.4 * 1e9 # 周波数 (Hz) - 2.4GHz
     
-    P_WINDOW_SIZE = 20
+    P_WINDOW_SIZE = 10
     
     NUM_DRONES = 50
     AREA_SIZE = (800, 600, 400)  # X, Y, Z (m)

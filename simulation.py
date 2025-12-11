@@ -62,17 +62,14 @@ class TdlsFanetSimulation:
             else:
                 direct_trust_mu = 0.5 * (0.5 ** total_weight)
             
-            # n_obs = uav_x.history_out.get(uav_j_id, {}).get('sent', 0)
             reception_times = uav_x.history_in.get(uav_j_id, {}).get('reception_times', [])
             window_start_time = max(0, current_time - self.config.P_WINDOW_SIZE)
             n_obs = sum(1 for t in reception_times if t >= window_start_time)
 
-            # decay_factor = 0.05
-            # variance = SimConfig.init_sigma * math.exp(-decay_factor * n_obs)
             if n_obs == 0:
                 direct_trust_sigma_sq = SimConfig.init_sigma
             else:
-                direct_trust_sigma_sq = max(1/(n_obs), 1e-6)
+                direct_trust_sigma_sq = SimConfig.init_sigma * max(1/(n_obs), 1e-6)
                 
             uav_x.direct_trust_to_neighbors[uav_j_id] = (direct_trust_mu, direct_trust_sigma_sq) # 信頼値と分散をセット
         return uav_x.direct_trust_to_neighbors
