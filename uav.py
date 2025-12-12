@@ -27,6 +27,7 @@ class UAV:
         self.velocity = self.initial_velocity.copy()
         self.destination = np.random.rand(3) * self.config.AREA_SIZE
         self.trust_score = self.config.INITIAL_TRUST
+        self.trust_var = self.config.INIT_SIGMA
         # IDを3で割った余りに基づいてタイプを決定的に割り当てる
         remainder = self.id % 3
         if remainder == 0:

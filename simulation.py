@@ -50,7 +50,7 @@ class TdlsFanetSimulation:
             return uav_x.direct_trust_to_neighbors
         for uav_j_id in uav_x.neighbors:
             if uav_j_id not in uav_x.direct_trust_to_neighbors:
-                uav_x.direct_trust_to_neighbors[uav_j_id] = (0.5, SimConfig.init_sigma) # 初期値
+                uav_x.direct_trust_to_neighbors[uav_j_id] = (0.5, SimConfig.INIT_SIGMA) # 初期値
                 continue
             m = metrics.get(uav_j_id, None)
             if m is None:
@@ -71,9 +71,9 @@ class TdlsFanetSimulation:
                     freshness_factor = max(1.0, time_diff / current_time_step)  # 新しいほど1に近い
                 else:
                     freshness_factor = 1.0 # シミュレーション開始時(t=0)は1.0とする
-                direct_trust_sigma_sq = SimConfig.init_sigma * freshness_factor
+                direct_trust_sigma_sq = SimConfig.INIT_SIGMA * freshness_factor
             else:
-                direct_trust_sigma_sq = SimConfig.init_sigma    
+                direct_trust_sigma_sq = SimConfig.INIT_SIGMA    
             uav_x.direct_trust_to_neighbors[uav_j_id] = (direct_trust_mu, direct_trust_sigma_sq) # 信頼値と分散をセット
         return uav_x.direct_trust_to_neighbors
 
@@ -95,11 +95,11 @@ class TdlsFanetSimulation:
                 if payload and uav_j.id in payload.direct_trust_to_neighbors:
                     rec = payload.direct_trust_to_neighbors[uav_j.id]
                 else:
-                    rec = (self.config.INITIAL_TRUST, self.config.init_sigma)
+                    rec = (self.config.INITIAL_TRUST, self.config.INIT_SIGMA)
                 recommendations.append(rec)
             
             if not recommendations:
-                avg_rec_mu, avg_rec_star = self.config.INITIAL_TRUST, self.config.init_sigma
+                avg_rec_mu, avg_rec_star = self.config.INITIAL_TRUST, self.config.INIT_SIGMA
             else:
                 avg_rec_mu, avg_rec_star = combine_gaussians([r[0] for r in recommendations], [r[1] for r in recommendations])
             uav_x.indirect_trust_to_others[uav_j.id] = (avg_rec_mu, avg_rec_star)
@@ -139,8 +139,8 @@ class TdlsFanetSimulation:
             if uav_x.id == uav_j.id:
                 continue
             
-            direct_trust = uav_x.direct_trust_to_neighbors.get(uav_j.id, (self.config.INITIAL_TRUST, self.config.init_sigma))
-            indirect_trust = uav_x.indirect_trust_to_others.get(uav_j.id, (self.config.INITIAL_TRUST, self.config.init_sigma))
+            direct_trust = uav_x.direct_trust_to_neighbors.get(uav_j.id, (self.config.INITIAL_TRUST, self.config.INIT_SIGMA))
+            indirect_trust = uav_x.indirect_trust_to_others.get(uav_j.id, (self.config.INITIAL_TRUST, self.config.INIT_SIGMA))
             
             # ハイブリッド信頼を計算
             hybrid_mu, hybrid_var = combine_gaussians(
@@ -154,14 +154,16 @@ class TdlsFanetSimulation:
         if not vals:
             avg_hybrid_by_target = self.config.INITIAL_TRUST
         else:
-            avg_hybrid_by_target = combine_gaussians([v[0] for v in vals], [v[1] for v in vals])[0]
+            avg_hybrid_by_target = combine_gaussians([v[0] for v in vals], [v[1] for v in vals])
             
         # 3) Fitness と重み付けして最終信頼に反映
         final_trust = (
             self.config.B_COEFFICIENT_FITNESS * fitness_score
-            + self.config.B_COEFFICIENT_HYBRID * avg_hybrid_by_target
+            + self.config.B_COEFFICIENT_HYBRID * avg_hybrid_by_target[0]
         )
         uav_j.trust_score = final_trust
+        uav_j.trust_var = avg_hybrid_by_target[1]
+
         return uav_j.trust_score
          
         
@@ -215,7 +217,7 @@ class TdlsFanetSimulation:
                 if sum_of_distances == 0:
                     score = member.trust_score
                 else:
-                    score = member.trust_score / sum_of_distances
+                    score = (member.trust_score - member.trust_var / SimConfig.INIT_SIGMA) / sum_of_distances
                 leader_scores.append((score, member))
 
             # スコアでソートし、リーダーとサブリーダーを決定

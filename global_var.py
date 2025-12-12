@@ -21,8 +21,7 @@ class SimConfig:
     B_COEFFICIENT_FITNESS = 0.5 # a*F_i + b*HT_i の 'a'
     B_COEFFICIENT_HYBRID = 0.5 # a*F_i + b*HT_i の 'b'
     
-    init_sigma = 2  # 初期分散の仮定値
-    d_sigma = 2  # 分散の仮定値
+    INIT_SIGMA = 2  # 初期分散の仮定値
     
     E_ELEC = 50e-9      # J/bit (50 nJ/bit), W_e
     E_AMP = 100e-12     # J/bit/m^2 (100 pJ/bit/m^2),  W_a
