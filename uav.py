@@ -42,10 +42,12 @@ class UAV:
             self.energy = self.initial_energy
         elif self.type == 'neutral':
             self.transmittion_rate = random.uniform(6, 8)   # Neutral nodes: 16-20 Mbps
-            self.energy = self.initial_energy * random.uniform(0.70, 0.75)  # Neutral nodes may start with less energy
+            self.energy = self.initial_energy
+            # self.energy = self.initial_energy * random.uniform(0.75, 0.9)  # Neutral nodes may start with less energy
         else:  # 'bad'
             self.transmittion_rate = random.uniform(4, 6)   # Bad nodes: 54-6 Mbps
-            self.energy = self.initial_energy * random.uniform(0.45, 0.5)  # Bad nodes may start with less energy
+            self.energy = self.initial_energy
+            # self.energy = self.initial_energy * random.uniform(0.45, 0.5)  # Bad nodes may start with less energy
         
         self.neighbors = []
         self.direct_trust_to_neighbors = {}
