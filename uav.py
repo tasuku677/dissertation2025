@@ -43,10 +43,12 @@ class UAV:
             self.energy = self.initial_energy
         elif self.type == 'neutral':
             self.transmittion_rate = random.uniform(6, 8)   # Neutral nodes: 16-20 Mbps
-            self.energy = self.initial_energy * random.uniform(0.75, 0.9)  # Neutral nodes may start with less energy
+            self.energy = self.initial_energy
+            # self.energy = self.initial_energy * random.uniform(0.75, 0.9)  # Neutral nodes may start with less energy
         else:  # 'bad'
             self.transmittion_rate = random.uniform(4, 6)   # Bad nodes: 54-6 Mbps
-            self.energy = self.initial_energy * random.uniform(0.45, 0.5)  # Bad nodes may start with less energy
+            self.energy = self.initial_energy
+            # self.energy = self.initial_energy * random.uniform(0.45, 0.5)  # Bad nodes may start with less energy
         
         self.neighbors = []
         self.direct_trust_to_neighbors = {}
@@ -68,6 +70,19 @@ class UAV:
         self.reports_addressed_to_me = 0 # リーダーとして自身に送られるはずだったレポート総数
 
     async def send_packet(self, destination_uav: 'UAV', payload: TelemetryPayload, sim_time: float) -> tuple[bool, float]:
+        #まずパケットを送るかどうかをタイプ別にランダムに決める
+        current_type = getattr(self, 'behavior_type', self.type)
+        # Badノードは 50% の確率で送信をサボる（不調、または意図的な沈黙）
+        if current_type == 'bad':
+            if random.random() < 0.5:
+                # 送信失敗（サボり）
+                # 遅延0でFalseを返す（相手には届かない）
+                return False, 0.0
+                
+        # Neutralノードもたまに送信失敗するとリアル（例: 10%）
+        if current_type == 'neutral':
+            if random.random() < 0.1:
+                return False, 0.0
         packet = Packet(self.id, destination_uav.id, payload, sim_time)
         dist = np.linalg.norm(self.pos - destination_uav.pos) 
         self.consume_energy_tx(SimConfig.PACKET_SIZE, dist)
