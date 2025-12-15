@@ -69,6 +69,19 @@ class UAV:
         self.reports_addressed_to_me = 0 # リーダーとして自身に送られるはずだったレポート総数
 
     async def send_packet(self, destination_uav: 'UAV', payload: TelemetryPayload, sim_time: float) -> tuple[bool, float]:
+        #まずパケットを送るかどうかをタイプ別にランダムに決める
+        current_type = getattr(self, 'behavior_type', self.type)
+        # Badノードは 50% の確率で送信をサボる（不調、または意図的な沈黙）
+        if current_type == 'bad':
+            if random.random() < 0.5:
+                # 送信失敗（サボり）
+                # 遅延0でFalseを返す（相手には届かない）
+                return False, 0.0
+        # Neutralノードもたまに送信失敗するとリアル（例: 10%）
+        if current_type == 'neutral':
+            if random.random() < 0.1:
+                return False, 0.0
+            
         packet = Packet(self.id, destination_uav.id, payload, sim_time)
         dist = np.linalg.norm(self.pos - destination_uav.pos) 
         self.consume_energy_tx(SimConfig.PACKET_SIZE, dist)
@@ -176,12 +189,3 @@ class UAV:
         d = distance if distance is not None else 0.0
         energy_consumed = packet_size_bits * (E_elec + E_amp * (d ** 2))
         self.energy -= energy_consumed
-     
-        
-    def _sample_delay(self, t:str)-> float:
-        if t == 'good':
-            return random.uniform(0.01, 0.05) # seconds
-        elif t == 'neutral':
-            return random.uniform(0.05, 0.1)
-        else:  # 'bad'
-            return random.uniform(0.5, 1.0)
