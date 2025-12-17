@@ -37,18 +37,20 @@ class UAV:
             self.type = 'neutral'
         else: # remainder == 2
             self.type = 'bad'
+        self.initial_type = self.type 
+        self.current_behavior_type = self.type # 現在の振る舞いを管理
         
         if self.type == 'good':
             self.transmittion_rate = random.uniform(8, 11)  # Good nodes: 20-25 Mbps
             self.energy = self.initial_energy
         elif self.type == 'neutral':
             self.transmittion_rate = random.uniform(6, 8)   # Neutral nodes: 16-20 Mbps
-            self.energy = self.initial_energy
-            # self.energy = self.initial_energy * random.uniform(0.75, 0.9)  # Neutral nodes may start with less energy
+            # self.energy = self.initial_energy
+            self.energy = self.initial_energy * random.uniform(0.75, 0.9)  # Neutral nodes may start with less energy
         else:  # 'bad'
             self.transmittion_rate = random.uniform(4, 6)   # Bad nodes: 54-6 Mbps
-            self.energy = self.initial_energy
-            # self.energy = self.initial_energy * random.uniform(0.45, 0.5)  # Bad nodes may start with less energy
+            # self.energy = self.initial_energy
+            self.energy = self.initial_energy * random.uniform(0.45, 0.5)  # Bad nodes may start with less energy
         
         self.neighbors = []
         self.direct_trust_to_neighbors = {}
@@ -130,17 +132,29 @@ class UAV:
                 # その他の予期せぬエラー
                 print(f"Error in packet_handler for UAV {self.id}: {e}")
                 break
-
+    
+    def update_behavior(self, current_time):
+        """On-Off攻撃のシミュレーション: Badノードが周期的に善人として振る舞う"""
+        if self.initial_type == 'bad':
+            # 例: 50秒周期で 善/悪 を切り替える
+            period = 50
+            if (current_time % period) < (period / 2):
+                self.current_behavior_type = 'good' # 信頼稼ぎモード
+            else:
+                self.current_behavior_type = 'bad'  # 攻撃モード
+        else:
+            self.current_behavior_type = self.initial_type
+            
     def receive_packet(self, packet: Packet) -> bool:
         """
         UAVのタイプに基づき、パケット受信(中継)の成否を返す
         """
         #TODO:エネルギー消費も考慮する
-        if self.type == 'good':
+        if self.current_behavior_type == 'good':
             return random.random() < 0.95  # 正常ノードは95%成功
-        elif self.type == 'neutral':
+        elif self.current_behavior_type == 'neutral':
             return random.random() < 0.7 # 70%の確率で成功(True)
-        elif self.type == 'bad':
+        elif self.current_behavior_type == 'bad':
             return random.random() < 0.2 # 20%の確率で破棄(False)
         
         # 受信成功確率を判定
