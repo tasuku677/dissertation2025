@@ -45,6 +45,10 @@ async def main():
         simulation.plot_trust_by_type() # タイプ別の平均信頼値をプロット
         plt.savefig(os.path.join(output_dir, f"trust_by_type_{timestamp}.png"))
         plt.close()
+        
+        simulation.plot_security_metrics() # セキュリティ指標のプロット
+        plt.savefig(os.path.join(output_dir, f"security_metrics_{timestamp}.png"))
+        plt.close()
 
         print(f"結果のプロットとCSVを '{output_dir}' フォルダに保存しました。")
         
