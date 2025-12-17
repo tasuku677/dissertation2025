@@ -25,7 +25,6 @@ class TdlsFanetSimulation:
         
                         'malicious_leader_ratio': [], # 悪性リーダーの割合
                         'leader_changes': [],         # そのステップで発生したリーダー交代数
-                        'avg_trust_uncertainty': [],  # ネットワーク全体の平均不確実性(分散)の推移
                         }
         self.visualizer = LiveVisualizer(config.AREA_SIZE, self.drones)
         self.previous_leaders = {}
@@ -313,9 +312,9 @@ class TdlsFanetSimulation:
         await drone.move(self.config.TIME_STEP)
         drone.update_neighbors(self.drones)
         self.update_direct_trust(drone)
-        self.update_indirect_trust(drone)
         self.update_final_trust(drone)
         self.history['trust'][drone.id].append(drone.trust_score)
+
 
         
     async def run(self):
@@ -461,23 +460,7 @@ class TdlsFanetSimulation:
         # 次回のために現在の状態を保存
         self.previous_leaders = current_leaders.copy()
         
-        # --- 3. (参考) 平均不確実性 ---
-        # 全ノードの信頼値の分散(Sigma)の平均を記録し、
-        # 「時間が経つにつれて確信度が高まっているか」を確認する
-        total_sigma = 0
-        count = 0
-        for d in self.drones:
-            # direct_trust_to_neighbors の sigma の平均をとるなど
-            # ここでは簡易的に、誰かに対する信頼値の分散の平均をとる例
-            if d.direct_trust_to_neighbors:
-                # 辞書の値は (mu, sigma_sq) なので index 1 を取得
-                sigmas = [val[1] for val in d.direct_trust_to_neighbors.values()]
-                total_sigma += np.mean(sigmas)
-                count += 1
-        
-        avg_uncertainty = total_sigma / count if count > 0 else 0
-        self.history['avg_trust_uncertainty'].append(avg_uncertainty)
-        
+                
     def plot_security_metrics(self):
         """セキュリティ・安定性に関する指標をプロット"""
         fig, axs = plt.subplots(2, 1, figsize=(10, 10))
