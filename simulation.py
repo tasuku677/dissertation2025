@@ -21,8 +21,14 @@ class TdlsFanetSimulation:
                         'trust': {i:[] for i in range(self.config.NUM_DRONES)},
                         'cluster_id': {i:[] for i in range(self.config.NUM_DRONES)},
                         'reports_received': {i:[] for i in range(self.config.NUM_DRONES)},
-                        'reports_sent': {i:[] for i in range(self.config.NUM_DRONES)}}
+                        'reports_sent': {i:[] for i in range(self.config.NUM_DRONES)},
+        
+                        'malicious_leader_ratio': [], # 悪性リーダーの割合
+                        'leader_changes': [],         # そのステップで発生したリーダー交代数
+                        'avg_trust_uncertainty': [],  # ネットワーク全体の平均不確実性(分散)の推移
+                        }
         self.visualizer = LiveVisualizer(config.AREA_SIZE, self.drones)
+        self.previous_leaders = {}
 
     def reset(self):
         """シミュレーションの状態をリセットする"""
@@ -55,6 +61,7 @@ class TdlsFanetSimulation:
             if m is None:
                 continue
             total_weight = 0.25 * m['ss'] + 0.25 * m['pdr'] + 0.25 * m['energy'] + 0.25 * m['delay']
+            # total_weight = 0 * m['ss'] + 0 * m['pdr'] + 1 * m['energy'] + 0 * m['delay']
             if total_weight >= 0.7:
                 direct_trust_mu = 0.5 * (2 ** total_weight)
             elif total_weight >= 0.3:
@@ -341,6 +348,8 @@ class TdlsFanetSimulation:
                 self.form_clusters()
                 self.select_leaders()
                 print(f"Time {t}s: Clusters and leaders have been updated.")
+                # --- ★ 追加: 評価指標の計算と記録 ---
+                self._record_metrics(t)
                 # リーダー選出後に、メンバーからリーダーへの報告処理を実行
                 await self._simulate_cluster_reporting(t)
                 
@@ -423,6 +432,96 @@ class TdlsFanetSimulation:
         except IOError as e:
             print(f"Error writing to {filename}: {e}")
 
+    def _record_metrics(self, t):
+        """評価指標を計算して履歴に保存する"""
+        
+        # --- 1. 悪性リーダー選出率 ---
+        total_clusters = len(self.clusters)
+        malicious_leaders = 0
+        current_leaders = {} # {cluster_id: leader_id}
+        
+        for cid, members in self.clusters.items():
+            leader = next((m for m in members if m.is_leader), None)
+            if leader:
+                current_leaders[cid] = leader.id
+                
+                # 現在「悪」として振る舞っている、あるいは元々「悪」タイプのノード
+                # (uav.pyに behavior_type を実装している場合はそちらを優先)
+                current_type = getattr(leader, 'behavior_type', leader.type)
+                
+                if current_type == 'bad':
+                    malicious_leaders += 1
+        
+        if total_clusters > 0:
+            ratio = malicious_leaders / total_clusters
+        else:
+            ratio = -1.0  # クラスタが存在しない場合の特別値
+        self.history['malicious_leader_ratio'].append(ratio)
+        
+        # --- 2. リーダー安定性 (交代回数) ---
+        changes = 0
+        for cid, leader_id in current_leaders.items():
+            # 前回のリーダー情報があり、かつIDが異なる場合
+            if cid in self.previous_leaders:
+                if self.previous_leaders[cid] != leader_id:
+                    changes += 1
+        
+        # クラスタ構成自体が変わってIDが変わることもあるため、
+        # 純粋なリーダー交代だけを見るのは難しいが、簡易的にこれで計測
+        self.history['leader_changes'].append(changes)
+        
+        # 次回のために現在の状態を保存
+        self.previous_leaders = current_leaders.copy()
+        
+        # --- 3. (参考) 平均不確実性 ---
+        # 全ノードの信頼値の分散(Sigma)の平均を記録し、
+        # 「時間が経つにつれて確信度が高まっているか」を確認する
+        total_sigma = 0
+        count = 0
+        for d in self.drones:
+            # direct_trust_to_neighbors の sigma の平均をとるなど
+            # ここでは簡易的に、誰かに対する信頼値の分散の平均をとる例
+            if d.direct_trust_to_neighbors:
+                # 辞書の値は (mu, sigma_sq) なので index 1 を取得
+                sigmas = [val[1] for val in d.direct_trust_to_neighbors.values()]
+                total_sigma += np.mean(sigmas)
+                count += 1
+        
+        avg_uncertainty = total_sigma / count if count > 0 else 0
+        self.history['avg_trust_uncertainty'].append(avg_uncertainty)
+        
+    def plot_security_metrics(self):
+        """セキュリティ・安定性に関する指標をプロット"""
+        fig, axs = plt.subplots(2, 1, figsize=(10, 10))
+        
+        # リーダー選出タイミング(10sごと)の時刻リストを作成
+        # simulation.py の run で if t % 10 == 0 の時に記録しているため
+        record_times = [t for t in range(0, self.config.SIM_DURATION, self.config.TIME_STEP) if t % 10 == 0]
+        
+        # データ長が合わない場合の調整 (念のため)
+        min_len = min(len(record_times), len(self.history['malicious_leader_ratio']))
+        times = record_times[:min_len]
+        ratios = self.history['malicious_leader_ratio'][:min_len]
+        changes = self.history['leader_changes'][:min_len]
+
+        # 1. 悪性リーダー選出率
+        axs[0].plot(times, ratios, marker='o', color='red', label='Malicious Leader Ratio')
+        axs[0].set_title('Ratio of Malicious Leaders over Time')
+        axs[0].set_xlabel('Time (s)')
+        axs[0].set_ylabel('Ratio')
+        axs[0].set_ylim(-0.05, 1.05)
+        axs[0].grid(True)
+        axs[0].legend()
+
+        # 2. リーダー交代回数 (安定性)
+        axs[1].bar(times, changes, width=4.0, color='orange', label='Leader Changes', alpha=0.7)
+        axs[1].set_title('Leader Stability (Number of Changes)')
+        axs[1].set_xlabel('Time (s)')
+        axs[1].set_ylabel('Count')
+        axs[1].grid(True)
+        axs[1].legend()
+
+        plt.tight_layout()
 
     def plot_results(self):
         self.visualizer.close()
