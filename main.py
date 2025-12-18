@@ -3,20 +3,43 @@ import matplotlib.pyplot as plt
 import numpy as np
 from global_var import SimConfig
 from simulation import TdlsFanetSimulation
+from simulationkundu import KunduTdlsFanetSimulation
 import os
 from datetime import datetime
 
 
 # --- メイン処理 ---
 async def main():
-    output_dir = "results"
+    # 最初にユーザー入力で実行種別を選択 (1: kundu, 2: nara)
+    choice = input("実行するシミュレーションを選んでください (1: kundu, 2: suggested) > ").strip()
+    attack_choice = input("攻撃シナリオを選んでください (1: on-off, 2: normal) > ").strip()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    config = SimConfig()
+    if choice == "1":
+        simulation = KunduTdlsFanetSimulation(config)
+        folder = "kundu" 
+    else:
+        simulation = TdlsFanetSimulation(config)
+        folder = "suggested"
+    # 攻撃シナリオの設定
+    if attack_choice == "1":
+        folder += "_onoff"
+    else:
+        folder += "_normal"
+    output_dir = os.path.join("records", folder, timestamp)
     os.makedirs(output_dir, exist_ok=True)
     
-    # ファイル名に使用するタイムスタンプを生成
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    config = SimConfig()
-    simulation = TdlsFanetSimulation(config)
+    # SimConfig のクラス変数をテキストファイルに保存
+    config_items = {
+        k: v for k, v in SimConfig.__dict__.items()
+        if not k.startswith('__') and not callable(v)
+    }
+    cfg_path = os.path.join(output_dir, "simconfig.txt")
+    with open(cfg_path, "w", encoding="utf-8") as f:
+        for k in sorted(config_items):
+            f.write(f"{k} = {repr(config_items[k])}\n")
+
+
     try:
         await simulation.run()
     except Exception as e:
