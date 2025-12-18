@@ -48,9 +48,9 @@ class UAV:
             # self.energy = self.initial_energy
             self.energy = self.initial_energy * random.uniform(0.75, 0.9)  # Neutral nodes may start with less energy
         else:  # 'bad'
-            self.transmittion_rate = random.uniform(4, 6)   # Bad nodes: 54-6 Mbps
-            # self.energy = self.initial_energy
-            self.energy = self.initial_energy * random.uniform(0.45, 0.5)  # Bad nodes may start with less energy
+            self.transmittion_rate = random.uniform(8, 11)   # Bad nodes: 54-6 Mbps
+            self.energy = self.initial_energy
+            # self.energy = self.initial_energy * random.uniform(0.45, 0.5)  # Bad nodes may start with less energy
         
         self.neighbors = []
         self.direct_trust_to_neighbors = {}
@@ -137,7 +137,7 @@ class UAV:
         """On-Off攻撃のシミュレーション: Badノードが周期的に善人として振る舞う"""
         if self.initial_type == 'bad':
             # 例: 50秒周期で 善/悪 を切り替える
-            period = 100
+            period = 50
             if (current_time % period) < (period / 2):
                 self.current_behavior_type = 'good' # 信頼稼ぎモード
             else:
