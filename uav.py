@@ -56,7 +56,7 @@ class UAV:
         self.direct_trust_to_neighbors = {}
         self.indirect_trust_to_others = {}
         self.hybrid_trust_to_others = {}
-        self.cluster_id = None
+        self.cluster_id = -1  # 所属クラスタID (-1は未所属)
         self.is_leader = False
         self.is_sub_leader = False
         self.has_been_leader = False # リーダー経験フラグ
@@ -135,9 +135,10 @@ class UAV:
     
     def update_behavior(self, current_time):
         """On-Off攻撃のシミュレーション: Badノードが周期的に善人として振る舞う"""
+        if current_time < 0:
+            return # シミュレーション準備期間中はタイプを変更しない
         if self.initial_type == 'bad':
-            # 例: 50秒周期で 善/悪 を切り替える
-            period = 50
+            period = self.config.CHANGE_BEHAVIOR_T
             if (current_time % period) < (period / 2):
                 self.current_behavior_type = 'good' # 信頼稼ぎモード
             else:
@@ -230,10 +231,3 @@ class UAV:
         energy_consumed = packet_size_bits * getattr(self.config, 'ENERGY_RX', getattr(SimConfig, 'E_ELEC'))
         self.energy -= energy_consumed
         
-    def _sample_delay(self, t:str)-> float:
-        if t == 'good':
-            return random.uniform(0.01, 0.05) # seconds
-        elif t == 'neutral':
-            return random.uniform(0.05, 0.1)
-        else:  # 'bad'
-            return random.uniform(0.5, 1.0)

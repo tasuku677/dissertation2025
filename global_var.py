@@ -3,10 +3,12 @@ class SimConfig:
     F = 2.4 * 1e9 # 周波数 (Hz) - 2.4GHz
     
     P_WINDOW_SIZE = 10
+    CHANGE_BEHAVIOR_T = 100 # seconds, 悪意ノードの行動タイプを切り替える周期
     
     NUM_DRONES = 50
-    AREA_SIZE = (800, 600, 400)  # X, Y, Z (m)
+    AREA_SIZE = (1600, 800, 800)  # X, Y, Z (m)
     BS_POS = [400, 300, 0]  # 地上局の位置 (m)
+    PREPARATION_DURATION = 20  # seconds
     SIM_DURATION = 100  # seconds
     TIME_STEP = 1  # 1秒ごとにシミュレーションを更新
     VELOCITY_RANGE = (8.9, 31.3)  # 20-70 mphをm/sに変換

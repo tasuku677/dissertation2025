@@ -55,7 +55,7 @@ class TdlsFanetSimulation:
             return uav_x.direct_trust_to_neighbors
         for uav_j_id in uav_x.neighbors:
             if uav_j_id not in uav_x.direct_trust_to_neighbors:
-                uav_x.direct_trust_to_neighbors[uav_j_id] = (0.5, SimConfig.INIT_SIGMA) # 初期値
+                uav_x.direct_trust_to_neighbors[uav_j_id] = (0.5, self.config.INIT_SIGMA) # 初期値
                 continue
             m = metrics.get(uav_j_id, None)
             if m is None:
@@ -74,9 +74,9 @@ class TdlsFanetSimulation:
             n_obs = sum(1 for t in reception_times if t >= window_start_time)
 
             if n_obs == 0:
-                direct_trust_sigma_sq = SimConfig.INIT_SIGMA
+                direct_trust_sigma_sq = self.config.INIT_SIGMA
             else:
-                direct_trust_sigma_sq = SimConfig.INIT_SIGMA * max(1/(n_obs), 1e-6)
+                direct_trust_sigma_sq = self.config.INIT_SIGMA * max(1/(n_obs), 1e-6)
                 
             uav_x.direct_trust_to_neighbors[uav_j_id] = (direct_trust_mu, direct_trust_sigma_sq) # 信頼値と分散をセット
         return uav_x.direct_trust_to_neighbors
@@ -220,7 +220,7 @@ class TdlsFanetSimulation:
                 if sum_of_distances == 0:
                     score = member.trust_score
                 else:
-                    score = (member.trust_score - member.trust_var / SimConfig.INIT_SIGMA) / sum_of_distances
+                    score = (member.trust_score - member.trust_var / self.config.INIT_SIGMA) / sum_of_distances
                 leader_scores.append((score, member))
 
             # スコアでソートし、リーダーとサブリーダーを決定
@@ -322,19 +322,17 @@ class TdlsFanetSimulation:
     async def run_uav_task(self, drone, t):
         #TODO: パケット受け取る度に保持データを更新する
         """個々のUAVの1ステップ分のタスク"""
+        # drone.update_behavior(t - self.config.PREPARATION_DURATION)
         await drone.move(self.config.TIME_STEP)
-        if t >= 0:
-            drone.update_neighbors(self.drones)
-            self.update_direct_trust(drone, t)
-            self.update_final_trust(drone)
-            self.history['trust'][drone.id].append(drone.trust_score)
-
+        drone.update_neighbors(self.drones)
+        self.update_direct_trust(drone, t)
+        self.update_final_trust(drone)
         
     async def run(self):
         # 各UAVのパケットハンドラーをバックグラウンドタスクとして起動
         self.packet_handlers = [asyncio.create_task(drone.packet_handler()) for drone in self.drones]
         
-        for t in range(0, self.config.SIM_DURATION, self.config.TIME_STEP):
+        for t in range(0, self.config.PREPARATION_DURATION + self.config.SIM_DURATION, self.config.TIME_STEP):
             # 1. 通信をシミュレートし、結果を取得
             pdr, avg_delay = await self._simulate_communication(t)
             
@@ -344,7 +342,7 @@ class TdlsFanetSimulation:
             # print(f"Time {t}s: Drones moved and updated their states.")
 
             # 3. クラスタ形成とリーダー選出 (10秒ごと)
-            if t % 10 == 0:
+            if t >= self.config.PREPARATION_DURATION and t % 10 == 0:
                 self.form_clusters()
                 self.select_leaders()
                 print(f"Time {t}s: Clusters and leaders have been updated.")
@@ -361,6 +359,7 @@ class TdlsFanetSimulation:
             self.history['pdr'].append(pdr)
             self.history['delay'].append(avg_delay)
             for drone in self.drones:
+                self.history['trust'][drone.id].append(drone.trust_score)
                 self.history['cluster_id'][drone.id].append(drone.cluster_id)
                 self.history['reports_received'][drone.id].append(drone.report_packets_received)
                 self.history['reports_sent'][drone.id].append(drone.report_packets_sent)
@@ -493,12 +492,8 @@ class TdlsFanetSimulation:
     def plot_security_metrics(self):
         """セキュリティ・安定性に関する指標をプロット"""
         fig, axs = plt.subplots(2, 1, figsize=(10, 10))
-        
-        # リーダー選出タイミング(10sごと)の時刻リストを作成
-        # simulation.py の run で if t % 10 == 0 の時に記録しているため
-        record_times = [t for t in range(0, self.config.SIM_DURATION, self.config.TIME_STEP) if t % 10 == 0]
-        
-        # データ長が合わない場合の調整 (念のため)
+
+        record_times = [t for t in self.history['time'] if t >= self.config.PREPARATION_DURATION and t % 10 == 0]        # データ長が合わない場合の調整 (念のため)
         min_len = min(len(record_times), len(self.history['malicious_leader_ratio']))
         times = record_times[:min_len]
         ratios = self.history['malicious_leader_ratio'][:min_len]
@@ -662,7 +657,7 @@ class TdlsFanetSimulation:
         # global_varの値をテキストとして整形
         config = self.config
         param_text = "Simulation Parameters\n-------------------------\n"
-        # SimConfigクラスのすべての属性をループで取得
+        # self.config.ラスのすべての属性をループで取得
         for key, value in config.__class__.__dict__.items():
             param_text += f"{key}: {value}\n"
         
