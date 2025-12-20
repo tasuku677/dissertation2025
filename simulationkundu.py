@@ -475,12 +475,14 @@ class KunduTdlsFanetSimulation:
         # 凡例用のダミープロットを追加（プロットは行わずラベルだけ表示）
         plt.plot([], [], color='gray', linestyle='--', linewidth=1.5, label=f'Overall Mean: {overall_mean:.2f}')
         
-        plt.title('Ratio of Malicious Leaders over Time')
-        plt.xlabel('Time (s)')
-        plt.ylabel('Ratio')
+        plt.title('Ratio of Malicious Leaders over Time', fontsize=20)
+        plt.xlabel('Time (s)', fontsize=20)
+        plt.ylabel('Ratio', fontsize=20)
+        plt.xticks(fontsize=20)
+        plt.yticks(fontsize=20)
         plt.ylim(-0.05, 1.05)
         plt.grid(True)
-        plt.legend()
+        plt.legend(fontsize=20)
         plt.tight_layout()
 
     def plot_results(self):

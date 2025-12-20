@@ -2,7 +2,7 @@ class SimConfig:
     C = 2.99792458 * 1e8 # 光速 (m/s)
     F = 2.4 * 1e9 # 周波数 (Hz) - 2.4GHz
     
-    P_WINDOW_SIZE = 10
+    P_WINDOW_SIZE = 10  # パケット受信ウィンドウサイズ
     CHANGE_BEHAVIOR_T = 100 # seconds, 悪意ノードの行動タイプを切り替える周期
     
     NUM_DRONES = 50

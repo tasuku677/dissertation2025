@@ -39,9 +39,8 @@ async def main():
         for k in sorted(config_items):
             f.write(f"{k} = {repr(config_items[k])}\n")
 
-
     try:
-        await simulation.run(attack_choice=attack_choice)
+        await simulation.run(attack_choice)
     except Exception as e:
         print(f"シミュレーション中にエラーが発生しました: {e}")
     finally:

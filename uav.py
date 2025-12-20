@@ -72,10 +72,10 @@ class UAV:
 
     async def send_packet(self, destination_uav: 'UAV', payload: TelemetryPayload, sim_time: float) -> tuple[bool, float]:
         #まずパケットを送るかどうかをタイプ別にランダムに決める
-        current_type = getattr(self, 'behavior_type', self.current_behavior_type)
-        # Badノードは 50% の確率で送信をサボる（不調、または意図的な沈黙）
+        current_type = getattr(self, 'current_behavior_type', self.current_behavior_type)
+        # Badノードは 80% の確率で送信をサボる（不調、または意図的な沈黙）
         if current_type == 'bad':
-            if random.random() < 0.5:
+            if random.random() < 0.8:
                 # 送信失敗（サボり）
                 # 遅延0でFalseを返す（相手には届かない）
                 return False, 0.0
