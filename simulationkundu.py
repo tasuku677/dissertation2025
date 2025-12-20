@@ -306,17 +306,18 @@ class KunduTdlsFanetSimulation:
         return pdr, avg_delay
 
         
-    async def run_uav_task(self, drone, t):
+    async def run_uav_task(self, drone, t, attack_choice):
         #TODO: パケット受け取る度に保持データを更新する
         """個々のUAVの1ステップ分のタスク"""
-        # drone.update_behavior(t - self.config.PREPARATION_DURATION)
+        if attack_choice == '1':
+            drone.update_behavior(t - self.config.PREPARATION_DURATION)
         await drone.move(self.config.TIME_STEP)
         drone.update_neighbors(self.drones)
         self.update_direct_trust(drone)
         self.update_final_trust(drone)
 
 
-    async def run(self):
+    async def run(self, attack_choice):
         # 各UAVのパケットハンドラーをバックグラウンドタスクとして起動
         self.packet_handlers = [asyncio.create_task(drone.packet_handler()) for drone in self.drones]
         
@@ -325,7 +326,7 @@ class KunduTdlsFanetSimulation:
             pdr, avg_delay = await self._simulate_communication(t)
             
             # 2. 全UAVのタスク（移動、近隣更新、信頼度計算）を並行実行
-            uav_tasks = [self.run_uav_task(drone, t) for drone in self.drones]
+            uav_tasks = [self.run_uav_task(drone, t, attack_choice) for drone in self.drones]
             await asyncio.gather(*uav_tasks)
             # print(f"Time {t}s: Drones moved and updated their states.")
 
@@ -356,7 +357,7 @@ class KunduTdlsFanetSimulation:
             self.visualizer.update(self.drones, sim_time=t)
             leader_map = {cid: next((m.id for m in mems if m.is_leader), None) for cid, mems in self.clusters.items()}
             if t % 10 == 0:
-                print(f"Time: {t}s, PDR: {pdr:.2f}, Avg Delay: {avg_delay*1000:.2f}ms, Leaders: {leader_map}, Leaders' types: {[self.drones[leader_map[cid]].type if leader_map[cid] is not None else 'N/A' for cid in leader_map]}")
+                print(f"Time: {t}s, PDR: {pdr:.2f}, Avg Delay: {avg_delay*1000:.2f}ms, Leaders: {leader_map}, Leaders' types: {[self.drones[leader_map[cid]].initial_type if leader_map[cid] is not None else 'N/A' for cid in leader_map]}")
 
         # シミュレーション終了時にパケットハンドラーを安全に停止
         for task in self.packet_handlers:
@@ -432,11 +433,8 @@ class KunduTdlsFanetSimulation:
             if leader:
                 current_leaders[cid] = leader.id
                 
-                # 現在「悪」として振る舞っている、あるいは元々「悪」タイプのノード
-                # (uav.pyに behavior_type を実装している場合はそちらを優先)
-                current_type = getattr(leader, 'behavior_type', leader.type)
-                
-                if current_type == 'bad':
+                initial_type = getattr(leader, 'initial_type')
+                if initial_type == 'bad':
                     malicious_leaders += 1
         
         if total_clusters > 0:
@@ -463,31 +461,26 @@ class KunduTdlsFanetSimulation:
         
     def plot_security_metrics(self):
         """セキュリティ・安定性に関する指標をプロット"""
-        fig, axs = plt.subplots(2, 1, figsize=(10, 10))
-
-        record_times = [t for t in self.history['time'] if t >= self.config.PREPARATION_DURATION and t % 10 == 0]        # データ長が合わない場合の調整 (念のため)
+        fig = plt.figure(figsize=(12, 6))
+        
+        record_times = [t for t in self.history['time'] if t >= self.config.PREPARATION_DURATION and t % 10 == 0]
         min_len = min(len(record_times), len(self.history['malicious_leader_ratio']))
         times = record_times[:min_len]
         ratios = self.history['malicious_leader_ratio'][:min_len]
-        changes = self.history['leader_changes'][:min_len]
 
-        # 1. 悪性リーダー選出率
-        axs[0].plot(times, ratios, marker='o', color='red', label='Malicious Leader Ratio')
-        axs[0].set_title('Ratio of Malicious Leaders over Time')
-        axs[0].set_xlabel('Time (s)')
-        axs[0].set_ylabel('Ratio')
-        axs[0].set_ylim(-0.05, 1.05)
-        axs[0].grid(True)
-        axs[0].legend()
-
-        # 2. リーダー交代回数 (安定性)
-        axs[1].bar(times, changes, width=4.0, color='orange', label='Leader Changes', alpha=0.7)
-        axs[1].set_title('Leader Stability (Number of Changes)')
-        axs[1].set_xlabel('Time (s)')
-        axs[1].set_ylabel('Count')
-        axs[1].grid(True)
-        axs[1].legend()
-
+        plt.plot(times, ratios, marker='o', color='red', label='Malicious Leader Ratio')
+        
+        ratios_arr = np.array(ratios, dtype=float)
+        overall_mean = float(np.mean(ratios_arr)) if ratios_arr.size > 0 else 0.0
+        # 凡例用のダミープロットを追加（プロットは行わずラベルだけ表示）
+        plt.plot([], [], color='gray', linestyle='--', linewidth=1.5, label=f'Overall Mean: {overall_mean:.2f}')
+        
+        plt.title('Ratio of Malicious Leaders over Time')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Ratio')
+        plt.ylim(-0.05, 1.05)
+        plt.grid(True)
+        plt.legend()
         plt.tight_layout()
 
     def plot_results(self):
@@ -524,7 +517,7 @@ class KunduTdlsFanetSimulation:
             uav_ids = list(range(min(5, self.config.NUM_DRONES)))  # デフォルトで先頭5機
         plt.figure(figsize=(10, 6))
         for i in uav_ids:
-            plt.plot(self.history['time'], self.history['trust'][i], label=f'UAV {i}:{self.drones[i].type}')
+            plt.plot(self.history['time'], self.history['trust'][i], label=f'UAV {i}:{self.drones[i].initial_type}')
         plt.title('UAV Trust over Time')
         plt.xlabel('Time (s)')
         plt.ylabel('Trust')
@@ -552,9 +545,9 @@ class KunduTdlsFanetSimulation:
             rows.append(row)
         
         # 最後の行に good ノードと bad ノードの平均を追加
-        good_nodes = [d.id for d in self.drones if d.type == 'good']
-        bad_nodes = [d.id for d in self.drones if d.type == 'bad']
-        neutral_nodes = [d.id for d in self.drones if d.type == 'neutral']
+        good_nodes = [d.id for d in self.drones if d.initial_type == 'good']
+        bad_nodes = [d.id for d in self.drones if d.initial_type == 'bad']
+        neutral_nodes = [d.id for d in self.drones if d.initial_type == 'neutral']
 
         if good_nodes:
             avg_good_trust = np.mean([self.history['trust'][i][-1] for i in good_nodes if self.history['trust'][i]])
@@ -645,9 +638,9 @@ class KunduTdlsFanetSimulation:
         """UAVのタイプ（good/bad）別に平均信頼値をプロットする"""
         plt.figure(figsize=(12, 6))
 
-        good_nodes = [d.id for d in self.drones if d.type == 'good']
-        bad_nodes = [d.id for d in self.drones if d.type == 'bad']
-        neutral_nodes = [d.id for d in self.drones if d.type == 'neutral']
+        good_nodes = [d.id for d in self.drones if d.initial_type == 'good']
+        bad_nodes = [d.id for d in self.drones if d.initial_type == 'bad']
+        neutral_nodes = [d.id for d in self.drones if d.initial_type == 'neutral']
 
         if not self.history['time']:
             print("プロットする履歴データがありません。")

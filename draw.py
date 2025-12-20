@@ -41,7 +41,7 @@ class LiveVisualizer:
                 colors.append('red')
             elif d.is_sub_leader:
                 colors.append('yellow')
-            elif d.type == 'bad':
+            elif d.initial_type == 'bad':
                 colors.append('black')
             else:
                 colors.append('blue')

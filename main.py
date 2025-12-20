@@ -41,7 +41,7 @@ async def main():
 
 
     try:
-        await simulation.run()
+        await simulation.run(attack_choice=attack_choice)
     except Exception as e:
         print(f"シミュレーション中にエラーが発生しました: {e}")
     finally:

@@ -32,18 +32,17 @@ class UAV:
         # IDを3で割った余りに基づいてタイプを決定的に割り当てる
         remainder = self.id % 3
         if remainder == 0:
-            self.type = 'good'
+            self.initial_type = 'good'
         elif remainder == 1:
-            self.type = 'neutral'
+            self.initial_type = 'neutral'
         else: # remainder == 2
-            self.type = 'bad'
-        self.initial_type = self.type 
-        self.current_behavior_type = self.type # 現在の振る舞いを管理
+            self.initial_type = 'bad'
+        self.current_behavior_type = self.initial_type # 現在の振る舞いを管理
         
-        if self.type == 'good':
+        if self.initial_type == 'good':
             self.transmittion_rate = random.uniform(8, 11)  # Good nodes: 20-25 Mbps
             self.energy = self.initial_energy
-        elif self.type == 'neutral':
+        elif self.initial_type == 'neutral':
             self.transmittion_rate = random.uniform(6, 8)   # Neutral nodes: 16-20 Mbps
             # self.energy = self.initial_energy
             self.energy = self.initial_energy * random.uniform(0.75, 0.9)  # Neutral nodes may start with less energy
@@ -73,7 +72,7 @@ class UAV:
 
     async def send_packet(self, destination_uav: 'UAV', payload: TelemetryPayload, sim_time: float) -> tuple[bool, float]:
         #まずパケットを送るかどうかをタイプ別にランダムに決める
-        current_type = getattr(self, 'behavior_type', self.type)
+        current_type = getattr(self, 'behavior_type', self.current_behavior_type)
         # Badノードは 50% の確率で送信をサボる（不調、または意図的な沈黙）
         if current_type == 'bad':
             if random.random() < 0.5:
@@ -147,21 +146,11 @@ class UAV:
             self.current_behavior_type = self.initial_type
             
     def receive_packet(self, packet: Packet) -> bool:
-        """
-        UAVのタイプに基づき、パケット受信(中継)の成否を返す
-        """
-        #TODO:エネルギー消費も考慮する
-        if self.current_behavior_type == 'good':
-            return random.random() < 0.95  # 正常ノードは95%成功
-        elif self.current_behavior_type == 'neutral':
-            return random.random() < 0.7 # 70%の確率で成功(True)
-        elif self.current_behavior_type == 'bad':
-            return random.random() < 0.2 # 20%の確率で破棄(False)
-        
+        """UAVのタイプに基づき、パケット受信(中継)の成否を返す"""
         # 受信成功確率を判定
-        if self.type == 'good':
+        if self.current_behavior_type == 'good':
             success = random.random() < 0.95  # 正常ノードは95%成功
-        elif self.type == 'neutral':
+        elif self.current_behavior_type == 'neutral':
             success = random.random() < 0.7 # 70%の確率で成功(True)
         else:  # 'bad'
             success = random.random() < 0.2 # 20%の確率で破棄(False)
@@ -171,7 +160,7 @@ class UAV:
             try:
                 self.consume_energy_rx(SimConfig.PACKET_SIZE)
             except Exception:
-                pass
+                print(f"Error consuming energy for UAV {self.id} on packet reception.")
         return success   
     
     def _get_random_velocity(self, v_range):
@@ -215,8 +204,8 @@ class UAV:
             distance: d (meters)
         """
 
-        E_elec = getattr(self.config, 'E_ELEC', getattr(SimConfig, 'E_ELEC'))
-        E_amp = getattr(self.config, 'E_AMP', getattr(SimConfig, 'E_AMP'))
+        E_elec = getattr(self.config, 'E_ELEC')
+        E_amp = getattr(self.config, 'E_AMP')
 
         # 距離が None や負の場合は 0 とみなす
         d = distance if distance is not None else 0.0
@@ -228,6 +217,6 @@ class UAV:
         受信エネルギーを消費する（パケット成功受信時に呼び出す）。
         デフォルトでは global_var の ENERGY_RX を使用し、未定義時は E_ELEC を代用。
         """
-        energy_consumed = packet_size_bits * getattr(self.config, 'ENERGY_RX', getattr(SimConfig, 'E_ELEC'))
+        energy_consumed = packet_size_bits * getattr(self.config, 'ENERGY_RX')
         self.energy -= energy_consumed
         
