@@ -444,8 +444,8 @@ class TdlsFanetSimulation:
             if leader:
                 current_leaders[cid] = leader.id
                 
-                initial_type = getattr(leader, 'initial_type')
-                if initial_type == 'bad':
+                current_behavior_type = getattr(leader, 'current_behavior_type')
+                if current_behavior_type == 'bad':
                     malicious_leaders += 1
         
         if total_clusters > 0:
