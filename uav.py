@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 
 from global_var import SimConfig
-from packet import Packet, TelemetryPayload, ClusterReportPayload
+from packet import HelloPacket, TelemetryPayload, ClusterReportPayload
 
 # --- UAV (ドローン) クラス ---
 class UAV:
@@ -30,13 +30,18 @@ class UAV:
         self.trust_var = self.config.INIT_SIGMA
         
         # IDを3で割った余りに基づいてタイプを決定的に割り当てる
-        remainder = self.id % 3
-        if remainder == 0:
-            self.initial_type = 'good'
-        elif remainder == 1:
-            self.initial_type = 'neutral'
-        else: # remainder == 2
+        remainder = self.id % 10
+        if remainder == 0 or remainder == 1:
             self.initial_type = 'bad'
+        else: 
+            self.initial_type = 'good'
+            
+        # if remainder == 0:
+        #     self.initial_type = 'good'
+        # # elif remainder == 1:
+        # #     self.initial_type = 'neutral'
+        # else: # remainder == 2
+        #     self.initial_type = 'bad'
         self.current_behavior_type = self.initial_type # 現在の振る舞いを管理
         
         if self.initial_type == 'good':
@@ -82,7 +87,7 @@ class UAV:
         if current_type == 'neutral':
             if random.random() < 0.1:
                 return False, 0.0
-        packet = Packet(self.id, destination_uav.id, payload, sim_time)
+        packet = HelloPacket(self.id, destination_uav.id, payload, sim_time)
         dist = np.linalg.norm(self.pos - destination_uav.pos) 
         self.consume_energy_tx(SimConfig.PACKET_SIZE, dist)
         transmission_delay = SimConfig.PACKET_SIZE / (self.transmittion_rate * 1e6) * 1e3  # milliseconds
@@ -104,7 +109,7 @@ class UAV:
         while True:
             try:
                 # タイムアウトを設けて、シミュレーション終了時にタスクを停止できるようにする
-                packet: Packet = await self.inbox.get()
+                packet: HelloPacket = await self.inbox.get()
                 
                 source_id = packet.source_id
                 # 受信履歴を初期化
@@ -145,7 +150,7 @@ class UAV:
         else:
             self.current_behavior_type = self.initial_type
             
-    def receive_packet(self, packet: Packet) -> bool:
+    def receive_packet(self, packet: HelloPacket) -> bool:
         """UAVのタイプに基づき、パケット受信(中継)の成否を返す"""
         # 受信成功確率を判定
         if self.current_behavior_type == 'good':
@@ -153,7 +158,7 @@ class UAV:
         elif self.current_behavior_type == 'neutral':
             success = random.random() < 0.7 # 70%の確率で成功(True)
         else:  # 'bad'
-            success = random.random() < 0.2 # 20%の確率で破棄(False)
+            success = random.random() < 0.2 # 80%の確率で破棄(False)
 
         # 成功した受信に対してエネルギーを消費
         if success:

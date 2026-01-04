@@ -17,12 +17,17 @@ class ClusterReportPayload:
     def __init__(self, member_id: int):
         self.member_id = member_id
 
-
 class Packet:
     def __init__(self, source_id: int, dest_id: int, payload: TelemetryPayload, timestamp: float):
         self.source_id = source_id
         self.dest_id = dest_id
         self.payload = payload
         self.timestamp = timestamp
-        
-    
+# 制御パケット
+class HelloPacket(Packet):
+    def __init__(self, source_id: int, dest_id: int, payload: TelemetryPayload, timestamp: float):
+        super().__init__(source_id, dest_id, payload, timestamp)
+# データパケット
+class ClusterReportPacket(Packet):
+    def __init__(self, source_id: int, dest_id: int, payload: ClusterReportPayload, timestamp: float):
+        super().__init__(source_id, dest_id, payload, timestamp)
