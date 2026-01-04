@@ -505,32 +505,50 @@ class KunduTdlsFanetSimulation:
         plt.tight_layout()
 
     def plot_results(self):
+        # 各指標を別々のFigureで描画
         self.visualizer.close()
-        fig, axs = plt.subplots(3, 1, figsize=(10, 15))
 
         # エネルギー消費
+        fig_e = plt.figure(figsize=(8, 4))
         initial_total_energy = self.config.NUM_DRONES * self.config.INITIAL_ENERGY
-        consumed_energy = (initial_total_energy - np.array(self.history['energy'])) / 1e3 # kJ
-        axs[0].plot(self.history['time'], consumed_energy)
-        axs[0].set_title('Energy Consumption over Time')
-        axs[0].set_xlabel('Time (s)')
-        axs[0].set_ylabel('Energy Consumed (kJ)')
-
-        # パケット配送率
-        axs[1].plot(self.history['time'], self.history['pdr'])
-        axs[1].set_title('Packet Delivery Ratio (PDR) over Time')
-        axs[1].set_xlabel('Time (s)')
-        axs[1].set_ylabel('PDR')
-        axs[1].set_ylim(0, 1.1)
-
-        # 遅延
-        delay_ms = np.array(self.history['delay']) * 1000
-        axs[2].plot(self.history['time'], delay_ms)
-        axs[2].set_title('Average Delay over Time')
-        axs[2].set_xlabel('Time (s)')
-        axs[2].set_ylabel('Delay (ms)')
-
+        consumed_energy = (initial_total_energy - np.array(self.history['energy'])) / 1e3  # kJ
+        plt.plot(self.history['time'], consumed_energy, color='tab:orange')
+        plt.title('Energy Consumption over Time')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Energy Consumed (kJ)')
+        plt.grid(True)
         plt.tight_layout()
+
+        # パケット配送率 (PDR)
+        fig_pdr = plt.figure(figsize=(8, 4))
+        times = np.array(self.history['time'])
+        pdrs = np.array(self.history['pdr']) if self.history['pdr'] else np.array([])
+        # PREPARATION_DURATION以降の平均を計算
+        mask = times >= self.config.PREPARATION_DURATION
+        if pdrs.size > 0 and np.any(mask):
+            avg_pdr_post = float(np.mean(pdrs[mask]))
+        else:
+            avg_pdr_post = float('nan')
+        plt.plot(self.history['time'], self.history['pdr'], color='tab:blue', marker='o', markersize=4, label=f'PDR (avg after {self.config.PREPARATION_DURATION}s: {avg_pdr_post:.2f})')
+        plt.title('Packet Delivery Ratio (PDR) over Time')
+        plt.xlabel('Time (s)')
+        plt.ylabel('PDR')
+        plt.ylim(0, 1.1)
+        plt.grid(True)
+        plt.legend(loc='best', fontsize=18)
+        plt.tight_layout()
+
+        # 平均遅延
+        fig_delay = plt.figure(figsize=(8, 4))
+        delay_ms = np.array(self.history['delay']) * 1000
+        plt.plot(self.history['time'], delay_ms, color='tab:green')
+        plt.title('Average Delay over Time')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Delay (ms)')
+        plt.grid(True)
+        plt.tight_layout()
+
+        return [fig_e, fig_pdr, fig_delay]
         
     # trustの推移をプロット    
     def plot_trust(self, uav_ids=None):

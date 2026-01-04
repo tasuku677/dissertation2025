@@ -52,9 +52,11 @@ async def main():
         simulation.save_report_history_to_csv(os.path.join(output_dir, f"report_history_{timestamp}.csv"))
         
         # 各プロットを個別のFigureとして作成し、ファイルに保存
-        simulation.plot_results()
-        plt.savefig(os.path.join(output_dir, f"results_{timestamp}.png"))
-        plt.close() # Figureを閉じる
+        figs = simulation.plot_results()
+        for idx, fig in enumerate(figs):
+            out_path = os.path.join(output_dir, f"results_{idx}_{timestamp}.png")
+            fig.savefig(out_path)
+            plt.close(fig)
         
         simulation.plot_trust([i for i in range(0, 10)])  # ドローンID 0-5の信頼度履歴を表示
         plt.savefig(os.path.join(output_dir, f"trust_history_{timestamp}.png"))
