@@ -251,9 +251,7 @@ class KunduTdlsFanetSimulation:
     async def _simulate_communication(self, t: int) -> Tuple[float, float]:
         """パケット送受信をシミュレートし、PDRと平均遅延を返す"""
         tasks_with_context: List[Tuple[asyncio.Task, UAV, UAV]] = []
-        total_packets_attempted = 0
-
-        # 各UAVが隣接ノードにパケットを送信するタスクを作成
+        # 各UAVが隣接ノードにHelloパケットを送信するタスクを作成
         for sender in self.drones:
             # 送信するペイロードを生成
             payload = TelemetryPayload(
@@ -267,14 +265,11 @@ class KunduTdlsFanetSimulation:
             )
             
             for neighbor_id in sender.neighbors:
-                total_packets_attempted += 1
                 neighbor = self.drones[neighbor_id]
                 task = asyncio.create_task(sender.send_packet(neighbor, payload, sim_time=t))
                 # 送信者(sender)と受信者(neighbor)をタスクと共に保存
                 tasks_with_context.append((task, sender, neighbor_id))
 
-        successful_packets = 0
-        total_delay = 0
         # 全ての送信タスクの完了を待つ
         for task, sender, receiver_id in tasks_with_context:
             try:
@@ -282,17 +277,8 @@ class KunduTdlsFanetSimulation:
                 # --- 送信履歴 (History OUT) の記録 (PDR計算用) ---
                 if receiver_id not in sender.history_out:
                     sender.history_out[receiver_id] = {'sent': 0, 'success': 0, 'delays': []}
-                
                 history = sender.history_out[receiver_id]
                 history['sent'] += 1
-                
-                if success:
-                    history['success'] += 1
-                    history['delays'].append(delay)
-                    
-                    # グローバルPDR/Delay集計
-                    successful_packets += 1
-                    total_delay += delay
 
             except Exception as e:
                 # print(f"Error in communication task from {sender.id} to {receiver_id}: {e}")
@@ -300,6 +286,39 @@ class KunduTdlsFanetSimulation:
                 if receiver_id not in sender.history_out:
                     sender.history_out[receiver_id] = {'sent': 0, 'success': 0, 'delays': []}
                 sender.history_out[receiver_id]['sent'] += 1
+        
+        # リーダーのPDRと平均遅延の計算.Dataパケット送信部分
+        total_packets_attempted = 0
+        successful_packets = 0
+        total_delay = 0.0
+        data_tasks = []
+        
+        for sender in self.drones:
+            if sender.cluster_id in self.clusters and not sender.is_leader:
+                target_leader = next((m for m in self.clusters.get(sender.cluster_id, []) if m.is_leader), None)
+                if target_leader:
+                    data_payload = TelemetryPayload( #TODO: ClusterReportPayloadに変更する
+                        energy=sender.energy,
+                        trust=sender.trust_score,
+                        pos=sender.pos,
+                        neighbors=sender.neighbors,
+                        direct_trust_to_neighbors=copy.deepcopy(sender.direct_trust_to_neighbors),
+                        cluster_id=sender.cluster_id,
+                        role="leader" if sender.is_leader else "sub" if sender.is_sub_leader else "member"
+                    )
+                    total_packets_attempted += 1
+                    task = asyncio.create_task(sender.send_packet(target_leader, data_payload, sim_time=t))
+                    data_tasks.append((task, sender, target_leader.id))              
+        for task, sender, target_leader in data_tasks:
+            try:
+                success, delay = await task
+                if success:
+                    successful_packets += 1
+                    total_delay += delay
+                    # 受信成功ビット数 (スループット用)
+                    total_bits += self.config.PACKET_SIZE* 10
+            except Exception:
+                pass
 
         pdr = successful_packets / total_packets_attempted if total_packets_attempted > 0 else 1.0
         avg_delay = total_delay / total_packets_attempted if total_packets_attempted > 0 else 0.0
