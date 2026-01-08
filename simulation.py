@@ -305,6 +305,7 @@ class TdlsFanetSimulation:
         successful_packets = 0
         total_delay = 0.0
         data_tasks = []
+        total_bits = 0
         
         for sender in self.drones:
             if sender.cluster_id in self.clusters and not sender.is_leader:
@@ -333,7 +334,7 @@ class TdlsFanetSimulation:
             except Exception:
                 pass
             
-        pdr = successful_packets / total_packets_attempted if total_packets_attempted > 0 else 1.0
+        pdr = successful_packets / total_packets_attempted if total_packets_attempted > 0 else 0
         avg_delay = total_delay / successful_packets if successful_packets > 0 else 0.0
         return pdr, avg_delay
 

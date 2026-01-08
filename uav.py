@@ -31,7 +31,7 @@ class UAV:
         
         # IDを3で割った余りに基づいてタイプを決定的に割り当てる
         remainder = self.id % 10
-        if remainder == 0 or remainder == 1:
+        if remainder == 0 or remainder == 1 or remainder == 2 or remainder ==3 or remainder ==4:
             self.initial_type = 'bad'
         else: 
             self.initial_type = 'good'
