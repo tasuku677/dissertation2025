@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 
 from global_var import SimConfig
-from packet import HelloPacket, TelemetryPayload, ClusterReportPayload
+from packet import HelloPacket, TelemetryPayload, ClusterReportPacket, ClusterReportPayload
 
 # --- UAV (ドローン) クラス ---
 class UAV:
@@ -31,15 +31,15 @@ class UAV:
         
         # IDを3で割った余りに基づいてタイプを決定的に割り当てる
         remainder = self.id % 10
-        if remainder == 0 or remainder == 1 or remainder == 2 or remainder ==3 or remainder ==4:
+        if remainder == 0 or remainder == 1 or remainder == 2 or remainder == 3:
             self.initial_type = 'bad'
         else: 
             self.initial_type = 'good'
-            
+        # remainder = self.id % 3    
         # if remainder == 0:
         #     self.initial_type = 'good'
-        # # elif remainder == 1:
-        # #     self.initial_type = 'neutral'
+        # elif remainder == 1:
+        #     self.initial_type = 'neutral'
         # else: # remainder == 2
         #     self.initial_type = 'bad'
         self.current_behavior_type = self.initial_type # 現在の振る舞いを管理
@@ -75,7 +75,7 @@ class UAV:
         self.report_packets_sent = 0 # メンバーとして送信したレポート数
         self.reports_addressed_to_me = 0 # リーダーとして自身に送られるはずだったレポート総数
 
-    async def send_packet(self, destination_uav: 'UAV', payload: TelemetryPayload, sim_time: float) -> tuple[bool, float]:
+    async def send_packet(self, destination_uav: 'UAV', payload, sim_time: float) -> tuple[bool, float]:
         #まずパケットを送るかどうかをタイプ別にランダムに決める
         current_type = getattr(self, 'current_behavior_type', self.current_behavior_type)
         # Badノードは 80% の確率で送信をサボる（不調、または意図的な沈黙）
@@ -87,9 +87,14 @@ class UAV:
         if current_type == 'neutral':
             if random.random() < 0.1:
                 return False, 0.0
-        packet = HelloPacket(self.id, destination_uav.id, payload, sim_time)
+            
         dist = np.linalg.norm(self.pos - destination_uav.pos) 
-        self.consume_energy_tx(SimConfig.PACKET_SIZE, dist)
+        if isinstance(payload, ClusterReportPayload):
+            packet = ClusterReportPacket(self.id, destination_uav.id, payload, sim_time)
+            self.consume_energy_tx(SimConfig.PACKET_SIZE*10, dist)
+        else:
+            packet = HelloPacket(self.id, destination_uav.id, payload, sim_time)
+            self.consume_energy_tx(SimConfig.PACKET_SIZE, dist)
         transmission_delay = SimConfig.PACKET_SIZE / (self.transmittion_rate * 1e6) * 1e3  # milliseconds
         await asyncio.sleep(transmission_delay)
         

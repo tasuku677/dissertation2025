@@ -311,14 +311,8 @@ class TdlsFanetSimulation:
             if sender.cluster_id in self.clusters and not sender.is_leader:
                 target_leader = next((m for m in self.clusters.get(sender.cluster_id, []) if m.is_leader), None)
                 if target_leader:
-                    data_payload = TelemetryPayload( #TODO: ClusterReportPayloadに変更する
-                        energy=sender.energy,
-                        trust=sender.trust_score,
-                        pos=sender.pos,
-                        neighbors=sender.neighbors,
-                        direct_trust_to_neighbors=copy.deepcopy(sender.direct_trust_to_neighbors),
-                        cluster_id=sender.cluster_id,
-                        role="leader" if sender.is_leader else "sub" if sender.is_sub_leader else "member"
+                    data_payload = ClusterReportPayload( #TODO: ClusterReportPayloadに変更する
+                        member_id=sender.id
                     )
                     total_packets_attempted += 1
                     task = asyncio.create_task(sender.send_packet(target_leader, data_payload, sim_time=t))
