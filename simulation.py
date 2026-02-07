@@ -516,14 +516,19 @@ class TdlsFanetSimulation:
         # 凡例用のダミープロットを追加（プロットは行わずラベルだけ表示）
         plt.plot([], [], color='gray', linestyle='--', linewidth=1.5, label=f'Overall Mean: {overall_mean:.2f}')
         
-        plt.title('Ratio of Malicious Leaders over Time', fontsize=20)
-        plt.xlabel('Time (s)', fontsize=20)
-        plt.ylabel('Ratio', fontsize=20)
-        plt.xticks(fontsize=20)
-        plt.yticks(fontsize=20)
+        plt.title('Ratio of Malicious Leaders over Time', fontsize=30)
+        plt.xlabel('Time (s)', fontsize=30)
+        plt.ylabel('Ratio', fontsize=30)
+        plt.xticks(fontsize=30)
+        plt.yticks(fontsize=30)
         plt.ylim(-0.05, 1.05)
         plt.grid(True)
-        plt.legend(fontsize=20)
+        # Create legend and increase font size for the "Overall Mean" entry
+        leg = plt.legend(fontsize=30)
+        if leg:
+            for txt in leg.get_texts():
+                if txt.get_text().startswith('Overall Mean'):
+                    txt.set_fontsize(28)
         plt.tight_layout()
         
     def plot_results(self):

@@ -19,6 +19,8 @@ class SimConfig:
     ENERGY_RX = 180 * 1e-9 # nJ/bitをJ/bitに変換
  
     PACKET_SIZE = 1024 * 8  # bits
+    HELLO_PACKET_SIZE = 128 * 8  # bits
+    APPLICATION_PACKET_SIZE = 1024 * 8  # bits
     
     # 信頼度計算の係数 (論文より)
     A_COEFFICIENT = 0.3 # 0.2から0.45の間の値
@@ -33,4 +35,5 @@ class SimConfig:
     E_AMP = 100e-12     # J/bit/m^2 (100 pJ/bit/m^2),  W_a
     
     # ノードタイプの割合
-    NODE_TYPE_WEIGHTS = {'good': 0.4, 'neutral': 0.3, 'bad': 0.3}  # good, neutral, bad の割合
+    BAD_NODE_RATIO = 0.2  # 悪意ノードの割合.
+    # NODE_TYPE_WEIGHTS = {'good': 0.4, 'neutral': 0.3, 'bad': 0.3}  # good, neutral, bad の割合

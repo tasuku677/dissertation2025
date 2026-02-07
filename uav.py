@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 
 from global_var import SimConfig
-from packet import HelloPacket, TelemetryPayload, ClusterReportPacket, ClusterReportPayload
+from packet import Packet, HelloPacket, TelemetryPayload, ClusterReportPacket, ClusterReportPayload
 
 # --- UAV (ドローン) クラス ---
 class UAV:
@@ -31,7 +31,7 @@ class UAV:
         
         # IDを3で割った余りに基づいてタイプを決定的に割り当てる
         remainder = self.id % 10
-        if remainder == 0 or remainder == 1 or remainder == 2 or remainder == 3:
+        if remainder < self.config.BAD_NODE_RATIO * 10:
             self.initial_type = 'bad'
         else: 
             self.initial_type = 'good'
@@ -91,11 +91,11 @@ class UAV:
         dist = np.linalg.norm(self.pos - destination_uav.pos) 
         if isinstance(payload, ClusterReportPayload):
             packet = ClusterReportPacket(self.id, destination_uav.id, payload, sim_time)
-            self.consume_energy_tx(SimConfig.PACKET_SIZE*10, dist)
+            self.consume_energy_tx(SimConfig.APPLICATION_PACKET_SIZE, dist)
         else:
             packet = HelloPacket(self.id, destination_uav.id, payload, sim_time)
-            self.consume_energy_tx(SimConfig.PACKET_SIZE, dist)
-        transmission_delay = SimConfig.PACKET_SIZE / (self.transmittion_rate * 1e6) * 1e3  # milliseconds
+            self.consume_energy_tx(SimConfig.HELLO_PACKET_SIZE, dist)
+        transmission_delay = SimConfig.HELLO_PACKET_SIZE / (self.transmittion_rate * 1e6) * 1e3  # milliseconds
         await asyncio.sleep(transmission_delay)
         
         # 成功確率は相手(受信側)のタイプに基づく
@@ -155,7 +155,7 @@ class UAV:
         else:
             self.current_behavior_type = self.initial_type
             
-    def receive_packet(self, packet: HelloPacket) -> bool:
+    def receive_packet(self, packet: Packet) -> bool:
         """UAVのタイプに基づき、パケット受信(中継)の成否を返す"""
         # 受信成功確率を判定
         if self.current_behavior_type == 'good':
@@ -168,7 +168,10 @@ class UAV:
         # 成功した受信に対してエネルギーを消費
         if success:
             try:
-                self.consume_energy_rx(SimConfig.PACKET_SIZE)
+                if isinstance(packet, HelloPacket):
+                    self.consume_energy_rx(SimConfig.HELLO_PACKET_SIZE)
+                elif isinstance(packet, ClusterReportPacket):
+                    self.consume_energy_rx(SimConfig.APPLICATION_PACKET_SIZE)
             except Exception:
                 print(f"Error consuming energy for UAV {self.id} on packet reception.")
         return success   
