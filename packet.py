@@ -2,6 +2,7 @@ from typing import List, Literal, TYPE_CHECKING
 
 
 class TelemetryPayload:
+    """制御パケット用のペイロード"""
     def __init__(self, energy: float, trust: float, pos: tuple[float, float, float], neighbors:List[int], direct_trust_to_neighbors:dict, cluster_id: int | None = None,
                  role: Literal["leader", "sub", "member"] = "member"):
         self.energy = energy
@@ -13,7 +14,7 @@ class TelemetryPayload:
         self.role = role
 
 class ClusterReportPayload:
-    """クラスタメンバーからリーダーへの報告用ペイロード"""
+    """クラスタメンバーからリーダーへの報告用ペイロード．"""
     def __init__(self, member_id: int):
         self.member_id = member_id
 
@@ -23,11 +24,11 @@ class Packet:
         self.dest_id = dest_id
         self.payload = payload
         self.timestamp = timestamp
-# 制御パケット
+# 制御パケット. 信頼値計算に使用する．
 class HelloPacket(Packet):
     def __init__(self, source_id: int, dest_id: int, payload: TelemetryPayload, timestamp: float):
         super().__init__(source_id, dest_id, payload, timestamp)
-# データパケット
+# データパケット．評価指標の計測に使用する．
 class ClusterReportPacket(Packet):
     def __init__(self, source_id: int, dest_id: int, payload: ClusterReportPayload, timestamp: float):
         super().__init__(source_id, dest_id, payload, timestamp)

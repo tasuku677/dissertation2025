@@ -287,7 +287,7 @@ class KunduTdlsFanetSimulation:
                     sender.history_out[receiver_id] = {'sent': 0, 'success': 0, 'delays': []}
                 sender.history_out[receiver_id]['sent'] += 1
         
-        # リーダーのPDRと平均遅延の計算.Dataパケット送信部分
+        #  リーダーのApplicationパケットのPDRと平均遅延の計算
         total_packets_attempted = 0
         successful_packets = 0
         total_delay = 0.0

@@ -35,5 +35,5 @@ class SimConfig:
     E_AMP = 100e-12     # J/bit/m^2 (100 pJ/bit/m^2),  W_a
     
     # ノードタイプの割合
-    BAD_NODE_RATIO = 0.2  # 悪意ノードの割合.
+    BAD_NODE_RATIO = 0.5  # 悪意ノードの割合.
     # NODE_TYPE_WEIGHTS = {'good': 0.4, 'neutral': 0.3, 'bad': 0.3}  # good, neutral, bad の割合

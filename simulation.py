@@ -300,7 +300,7 @@ class TdlsFanetSimulation:
                     sender.history_out[receiver_id] = {'sent': 0, 'success': 0, 'delays': []}
                 sender.history_out[receiver_id]['sent'] += 1
         
-        # リーダーのPDRと平均遅延の計算.Dataパケット送信部分
+        # リーダーのApplicationパケットのPDRと平均遅延の計算.
         total_packets_attempted = 0
         successful_packets = 0
         total_delay = 0.0
@@ -311,7 +311,7 @@ class TdlsFanetSimulation:
             if sender.cluster_id in self.clusters and not sender.is_leader:
                 target_leader = next((m for m in self.clusters.get(sender.cluster_id, []) if m.is_leader), None)
                 if target_leader:
-                    data_payload = ClusterReportPayload( #TODO: ClusterReportPayloadに変更する
+                    data_payload = ClusterReportPayload( 
                         member_id=sender.id
                     )
                     total_packets_attempted += 1
