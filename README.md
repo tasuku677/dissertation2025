@@ -9,3 +9,8 @@ main.pyを実行するとシミュレーションを行えます．
 - **simulation.py**: 提案手法（Suggested）またはベースとなるTDLS FANETシミュレーションのロジック（`TdlsFanetSimulation`）を実装しています。
 - **simulationkundu.py**: 比較対象となるKunduモデルのシミュレーションロジック（`KunduTdlsFanetSimulation`）を実装しています。
 - **records/**: シミュレーション実行時に生成される結果ファイル（CSV, PNG, 設定ログ）が保存されるディレクトリです。
+
+## Github
+
+オリジナルソースコードはここです．
+https://github.com/tasuku677/dissertation2025
